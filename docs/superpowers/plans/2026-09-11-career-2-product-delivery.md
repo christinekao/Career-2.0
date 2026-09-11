@@ -2,7 +2,7 @@
 
 **Goal:** 先建立 Career Evidence + Opportunity foundation，交付保存實際投遞版本與下一步的單人工作區，再以同一組經歷支撐四層求職策略。
 
-**Plan Status:** APPROVED / FROZEN，R1，2026-09-12。使用者 minor scope review 的三項調整已納入；Project Mother bootstrap 與產品實作尚未開始。
+**Plan Status:** APPROVED / FROZEN，R1，2026-09-12。使用者 minor scope review 的三項調整已納入；Career 2.0 獨立 Git baseline 已建立；T02 已完成，產品實作尚未開始。
 
 **Architecture:** 單一應用、六個產品責任領域；原始碼與私人資料分離。事實、生成草稿、已送快照分開；使用成熟能力處理儲存與文件輸出，客製可追溯策略與版本行為。
 
@@ -36,11 +36,11 @@
 
 ## 階段與退出標準
 
-執行前置順序已凍結：T00 Plan Freeze → Project Mother bootstrap → 建立 Career 2.0 canonical repo → T02 Phase 0 architecture → T01 OSS capability selection → M1 vertical slice。Bootstrap 必須使用實際 Project Mother 權威流程；本文件只規定順序與專案身份，不自製 bootstrap 命令。既有 task IDs 保留，編號不代表執行先後。
+執行前置順序（Career 2.0 current baseline）：T00 Plan Freeze → 建立獨立 Career 2.0 Git repo → T02 Phase 0 architecture → T01 OSS capability selection → M1 vertical slice。Engineering Memory 不在此順序內，也不是本案 governance、architecture、lifecycle、repository 或 validator。既有 task IDs 保留，編號不代表執行先後。
 
 | 階段 | 目標/範圍 | 使用者可見成果 | 主要資料 | 依賴 | 驗證與退出條件 |
 | --- | --- | --- | --- | --- | --- |
-| M0 / Phase 0 架構與能力決策 | T00 已凍結；bootstrap/canonical repo 後先 T02 邏輯架構，再 T01 能力選型 | 可審查的架構邊界和工具決策 | 概念資料與合成場景 | Bootstrap 實際流程；必要實驗/安裝需選型批准 | 五條 invariant 與資料邊界確定；M1 必需能力通過選型，不等待 M2 AI/renderer |
+| M0 / Phase 0 架構與能力決策 | T00 已凍結；獨立 canonical repo 後先 T02 邏輯架構，再 T01 能力選型 | 可審查的架構邊界和工具決策 | 概念資料與合成場景 | T02 architecture contracts；必要實驗/安裝需選型批准 | 五條 invariant 與資料邊界確定；M1 必需能力通過選型，不等待 M2 AI/renderer |
 | M1 Foundation + Workspace | T03、T07 foundation，T04–T06 工作區與驗收；Evidence、職缺、送出、互動、面試、下一步 | 可建立/編輯經歷，查回投給誰、投什麼及當時依據 | Evidence revisions、Opportunity、JD、Submission、Contact、Interaction、InterviewEvent、NextAction | M0；T04 依賴 T03 + T07 | M1-A–M1-H 全部 PASS，Evidence 已可用，日常不依賴 AI |
 | M2 差異化 MVP | T08–T15；重用 M1 經歷，四層策略、CV/Pack、檢查、輸出 | 一份 JD 產生可說清楚且一致的求職材料 | Story、Analysis、Positioning、Material、Finding，引用已有 Evidence | M1 已驗收；按需完成 T01 的 M2 能力決策 | MVP-01–MVP-12 全部 PASS；一真實 JD 完整跑通，第二 JD 驗證重用 |
 | M3 情境與回顧 | F01–F04；公司研究、情報差異、debrief、更新建議、強化 review | 下一次面試知道應問什麼、修什麼 | Research、Discrepancy、Interaction、Interview、Finding | 完整 MVP 已驗收 | 來源可追、衝突不被吞、回饋不直接改事實、無明確拒絕原因仍未知 |
@@ -72,13 +72,13 @@
 
 ### T02：Phase 0 邏輯架構與事實、版本邊界
 
-- Priority：P0；Phase：M0 / Phase 0；Dependencies：T00；另以前置 Project Mother bootstrap 與 Career 2.0 canonical repo 完成為條件。
+- Priority：P0；Phase：M0 / Phase 0；Dependencies：T00；Career 2.0 independent Git baseline 已完成。
 - Goal：明確定義每個寫入由誰負責、歷史如何保留，以及失敗如何恢復。
 - Inputs：Frozen PRODUCT_PLAN 第 0 節與 K–M、bootstrap 產出的 canonical 邊界；不依賴未完成的工具選型。
 - Outputs：邏輯資料/責任/讀寫契約、私人資料位置要求、備份範圍與合成場景；選型後於 T03/T07 落實實際檔案與介面。
 - Acceptance Criteria：Career Evidence + Opportunity 同為 foundation；事實/草稿/快照不同；引用鎖定 revision；送出內容、時間、職缺、來源與當時引用不可變；多視窗舊寫入需拒絕或比較；刪除/備份政策可說明；不先建立 framework/schema。
 - Validation Method：桌面推演 Evidence 修訂、檔案移動、重複投遞、備份還原、AI 舊回應，將必測不變條件交 T01 評估及 M1/M2 執行。
-- [ ] 在 canonical repo 完成 Phase 0 邏輯架構，作為 OSS capability selection 的輸入。
+- [x] 2026-09-12：在 canonical repo 完成 Phase 0 M1 persistence、file/attachment、revision、submission、privacy、backup/restore、single-writer 與 validation contracts；作為 T01 capability selection 的輸入。
 
 ### T03：建立職缺與日常工作清單
 
@@ -255,7 +255,7 @@ flowchart TD
 
 可並行的責任：T03 Opportunity 與 T07 Career Evidence 可在 T02 架構及 T01 的 M1 選型後按獨立模組準備；T04 必須等兩者完成。T08 依賴 M1 驗收，不是 M1 foundation 的前置能力。共享契約修改由 coordinator 排序。這是未來任務安排，不是本輪啟動 subagents 的指令。
 
-必要順序：T00 → bootstrap → canonical repo → T02 → T01 的 M1 選型 → T03 + T07 → T04 → T05 → T06 → M2 所需能力選型 → T08 → T09 → T10 → T11 → T12 → T13 → T14 → T15。T07 是 M1 的必要依賴，不能移回 M2。F01–F04、L01–L04 不阻擋 MVP，保持延後。
+必要順序：T00 → 獨立 Career 2.0 Git baseline → T02 → T01 的 M1 選型 → T03 + T07 → T04 → T05 → T06 → M2 所需能力選型 → T08 → T09 → T10 → T11 → T12 → T13 → T14 → T15。T07 是 M1 的必要依賴，不能移回 M2。F01–F04、L01–L04 不阻擋 MVP，保持延後。
 
 ## M1 Acceptance
 
@@ -295,4 +295,4 @@ flowchart TD
 
 T15 完成由 coordinator 查看實際產物與驗證結果後決定。只完成 prompt、後端、測試或 subagent 回報均不足以宣稱 MVP 完成。
 
-本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。實作、產品測試、依賴安裝、framework 選型、bootstrap 與 repo 建立均未開始。NEXT = PROJECT MOTHER BOOTSTRAP，專案是 Career 2.0；之後 Phase 0 architecture 再做 OSS capability selection。
+本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。Career 2.0 independent Git baseline = `74e05d0bdd20e55453b64504bd04d77bb408ed86`；T02 已完成。實作、產品測試、依賴安裝、framework 選型、AI/provider/renderer 選型均未開始；Engineering Memory 未 bootstrap、未 binding。NEXT = T01 M1 capability selection，之後 M1 vertical slice。

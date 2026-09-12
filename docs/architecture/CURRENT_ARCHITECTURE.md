@@ -1,6 +1,6 @@
 # 架構現況與提案邊界
 
-現況更新：2026-09-12，Plan Frozen R1。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`）；T02 M1 executable architecture contracts 已完成；產品實作尚未開始。
+現況更新：2026-09-12，Plan Frozen R1。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`）；T02 M1 executable architecture contracts 與 T01 M1 capability selection 已完成；產品實作尚未開始。
 
 ## 已觀察現況
 
@@ -19,7 +19,7 @@
 
 最新使用者 scope review 為 R1 凍結依據：Career Evidence + Opportunity 同為 M1 foundation；其上是 M1 Workspace，再 M2 Intelligence；完整 MVP = M1 + M2。五條 frozen invariant 見 [產品規劃](../PRODUCT_PLAN.md)。附件是需求來源，OSS 文件只是參考。新案與 canonical repo 身份是 Career 2.0，不延伸舊 Job-Ops；正式對外品牌尚未決定。
 
-交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → M1 vertical slice。既有圖是凍結產品規則與 Proposed 技術邊界的紀錄；本次 T02 契約已補足可執行語意，但不代表產品功能已上線。
+交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → M1 vertical slice。既有圖是凍結產品規則與 Proposed 技術邊界的紀錄；T02 契約與 T01 capability boundary 已補足 M1 開工前語意，但不代表產品功能已上線。
 
 ## 五張圖
 
@@ -46,7 +46,23 @@
 
 一個單人應用擁有 canonical 寫入責任；以六個產品領域整理責任，不拆多服務。M1 Career Evidence 可手動建立/編輯/確認，與 Opportunity 共同支撐工作區；送出快照封存當時引用。M1 Interaction 限九項紀錄，不包含 CRM pipeline/scoring/campaign/automation。M2 AI 產生候選；domain rules 與人確認決定是否接納。公開研究與 recruiter 說法保留來源，不提高為無條件事實。
 
-framework、儲存實作、API/CLI 執行方、檔案位置、成本與交期仍未批准；T02 只固定行為契約，不固定部署拓撲或工具。架構圖與本節不具備對未選工具的驗證效力。
+T01 已選定 M1 capability boundary，但尚未安裝或實作：Electron stable v44 line + React/Vite renderer、SQLite through `better-sqlite3`、native filesystem/path/crypto/test APIs，以及 `fflate` ZIP container。Exact lockfile pin、native-addon compatibility probe、檔案/備份樣本測試與成本/交期仍是 implementation gate；架構圖不把這些工具當成已上線功能。
+
+## T01 M1 selected capability boundary
+
+Status：CONCEPTUAL SELECTION，2026-09-12。這是對 T02 行為契約的最小技術落點，不是 schema、runtime code 或 installed dependency。
+
+- Application shape：React/Vite renderer → narrow preload/IPC → Electron main process/application/domain，main process 是唯一 canonical writer；沒有 server、background worker、scheduler、sync 或第二 writer。
+- Structured state：SQLite via `better-sqlite3` behind a replaceable persistence boundary. Evidence revisions, Opportunity state, interactions, application events and submission references remain T02 domain contracts.
+- Files and identity：native `fs`/`path`/`crypto`; the configured private root remains outside Git, and generated content cannot promote itself to Evidence.
+- Backup：`fflate` supplies only the ZIP container. Career 2.0 owns the sorted manifest, SHA-256 entries, complete pre-restore validation, new-root staging and no-silent-merge policy.
+- Validation：Node `node:test` plus native fixtures automates domain, persistence, filesystem, immutability, backup/restore and privacy checks; M1 UI acceptance remains manual.
+- Replacement gate：if the selected SQLite binding cannot pass the synthetic Electron open/write/transaction/reopen check, stop and re-evaluate the binding/runtime; do not silently substitute it.
+
+The detailed current-source audit, score matrices, license records and rejected
+options are maintained in [OSS_REUSE.md](../OSS_REUSE.md). No T01 decision
+changes the five product invariants or the T02 canonical/generated/derived/
+immutable boundaries.
 
 ## T02 M1 executable architecture contracts
 
@@ -171,7 +187,7 @@ Restore must validate manifest, all required bytes and references before reporti
 
 ### 9. M1 validation strategy
 
-Fixtures are synthetic, deterministic and local. Domain/persistence/file/backup checks must use fixed inputs, explicit clocks/identities where needed, stable ordering and no network. UI and mobile/keyboard acceptance remains manual until a concrete capability is selected.
+Fixtures are synthetic, deterministic and local. Domain/persistence/file/backup checks must use fixed inputs, explicit clocks/identities where needed, stable ordering and no network. UI and mobile/keyboard acceptance remains manual for M1; no browser E2E dependency is selected.
 
 | M1 acceptance area | Validation type | Automated/manual | Evidence |
 | --- | --- | --- | --- |
@@ -197,10 +213,10 @@ PASS requires exact acceptance behavior, no hidden fallback, no unresolved data-
 | Local runtime/application framework | One local application, one writer, configurable private root, no required server/network, accessible controls | Mature OSS/native capability, small footprint, replaceable modules, easy test execution | Custom browser runtime, agent runtime, provider router, plugin framework | Multi-user/cloud runtime |
 | Testing/validation | Deterministic domain/persistence/filesystem/backup/immutability/privacy checks plus manual UI acceptance | Existing/native test capability, readable fixtures, stable artifact evidence | Large test platform before need is proven, automatic visual grid by default | M2 AI/renderer evaluation and advanced semantic review |
 
-T01 must compare existing/native/OSS options against these requirements and record exit/migration cost, privacy behavior, license, maintenance, interfaces and test evidence before installation or dependency approval. No choice is made by T02.
+T01 compared existing/native/OSS options against these requirements and recorded exit/migration cost, privacy behavior, license, maintenance, interfaces and current-source evidence in [OSS_REUSE.md](../OSS_REUSE.md). Installation, exact pinning and runtime probe remain a later implementation gate; no product code is implied.
 
 ### 11. Deferred architecture
 
 Beyond M1: AI execution and provider/model choice; CV/Interview generation; document editor and renderer/PDF; company research and public-source ingestion; external calendar/email/connectors; cloud sync and multi-user collaboration; complex analytics/feedback warehouse; Job Discovery/source aggregation; CRM; encryption/key-management infrastructure; background scheduling and automation.
 
-Simplicity test result：M1 requires one local writer, private files, explicit revisions, immutable submission snapshots, deterministic backup/restore and bounded validation. It does not justify server architecture, generic adapters, agent/orchestration layers, browser runtime, plugin system, event-sourcing platform or future-scale infrastructure.
+Simplicity test result：M1 requires one local writer, private files, explicit revisions, immutable submission snapshots, deterministic backup/restore and bounded validation. It does not justify server architecture, generic adapters, agent/orchestration layers, custom browser runtime, plugin system, event-sourcing platform or future-scale infrastructure. Electron is the selected existing desktop shell; it is not a custom browser runtime.

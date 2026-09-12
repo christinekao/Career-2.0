@@ -10,7 +10,9 @@
 - Scope review：Evidence 已移到 M1 foundation；Submitted Material 的內容/時間/職缺/來源/當時 Evidence 引用不可變；M1 Interaction 九項紀錄及非 CRM 邊界明列。
 - Frozen：五條 product invariants；M1 四個可用頁籤；M2 intelligence；完整 MVP = M1 + M2。
 - 文件檢查通過：11 份 Markdown 的本地連結與 code fences 完整；16 個核心任務欄位齊備、依賴無循環；T04/T06 必須先有 T07 Evidence；Phase 0 在選型前；8 項 M1 + 12 項完整 MVP 驗收與五條 invariant 齊備。Mermaid 為文件原稿，未做瀏覽器渲染驗收；產品測試未執行。
-- PLAN = APPROVED / FROZEN（R1）；T00、T02 完成；T01 與其餘 task 未執行。
+- PLAN = APPROVED / FROZEN（R1）；T00、T01、T02 完成；其餘 implementation task 未執行。
 - T02 已完成：M1 persistence、file/attachment、canonical/generated/derived/immutable、revision、submission、privacy、backup/restore、single-writer 與 validation contracts 已記錄在 CURRENT_ARCHITECTURE.md。
-- NEXT = T01 M1 capability selection → M1 vertical slice。具體工具尚未選定。沒有重做產品或 OSS 研究。
+- T01 已完成：選定 SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3；比較、current-source audit、依賴邊界與退出方式記錄在 OSS_REUSE.md。沒有安裝依賴或建立 implementation。
+- T01 限制：exact lockfile pin、Electron native-addon compatibility probe、樣本試驗與實作 gate 尚未執行；失敗時必須停下重評，不可靜默替換。
+- NEXT = M1 vertical slice。M1 implementation 尚未開始；不等待 M2 AI/renderer 能力選型。
 - IMPLEMENTATION = NOT_STARTED。

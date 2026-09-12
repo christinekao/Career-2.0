@@ -2,11 +2,11 @@
 
 **Goal:** 先建立 Career Evidence + Opportunity foundation，交付保存實際投遞版本與下一步的單人工作區，再以同一組經歷支撐四層求職策略。
 
-**Plan Status:** APPROVED / FROZEN，R1，2026-09-12。使用者 minor scope review 的三項調整已納入；Career 2.0 獨立 Git baseline 已建立；T02 已完成，產品實作尚未開始。
+**Plan Status:** APPROVED / FROZEN，R1，2026-09-12。使用者 minor scope review 的三項調整已納入；Career 2.0 獨立 Git baseline 已建立；T01/T02 已完成，產品實作尚未開始。
 
 **Architecture:** 單一應用、六個產品責任領域；原始碼與私人資料分離。事實、生成草稿、已送快照分開；使用成熟能力處理儲存與文件輸出，客製可追溯策略與版本行為。
 
-**Tech Stack:** 尚未選定；依 [OSS 比較](../../OSS_REUSE.md) 的候選與 T01 完成具體選型並經批准。本文不指定程式檔案、函式或 executable schema，遵守使用者 DO NOT CODE / DO NOT CREATE SCHEMAS 的限制。
+**Tech Stack:** T01 已完成 M1 capability boundary：SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3。Exact lockfile/version recheck、安裝、runtime probe 與 implementation 仍未開始；本文不指定程式檔案、函式或 executable schema，遵守使用者 DO NOT CODE / DO NOT CREATE SCHEMAS 的限制。
 
 **Spec:** [PRODUCT_PLAN.md](../../PRODUCT_PLAN.md)。T00 產品範圍已凍結；其餘工作未執行。完成規劃不代表任何 implementation task 完成。
 
@@ -27,7 +27,7 @@
 | 規劃檔案 | 責任 |
 | --- | --- |
 | docs/PRODUCT_PLAN.md | 客群、流程、功能清單、概念模型、事實與隱私規則、UX |
-| docs/OSS_REUSE.md | 原始來源、候選比較、取用方式、待批准選型 |
+| docs/OSS_REUSE.md | 原始來源、候選比較、取用方式、T01 M1 capability selection |
 | 本文件 | 階段、工作項目、依賴、驗收與 exit criteria |
 | docs/architecture/CURRENT_ARCHITECTURE.md | 實際現況與 Proposed 明確分開，統一架構圖入口 |
 | docs/architecture/diagrams/*.md | 五個邊界/責任/資料/交付視圖 |
@@ -40,13 +40,13 @@
 
 | 階段 | 目標/範圍 | 使用者可見成果 | 主要資料 | 依賴 | 驗證與退出條件 |
 | --- | --- | --- | --- | --- | --- |
-| M0 / Phase 0 架構與能力決策 | T00 已凍結；獨立 canonical repo 後先 T02 邏輯架構，再 T01 能力選型 | 可審查的架構邊界和工具決策 | 概念資料與合成場景 | T02 architecture contracts；必要實驗/安裝需選型批准 | 五條 invariant 與資料邊界確定；M1 必需能力通過選型，不等待 M2 AI/renderer |
+| M0 / Phase 0 架構與能力決策 | T00 已凍結；獨立 canonical repo 後先 T02 邏輯架構，再 T01 能力選型 | 可審查的架構邊界和工具決策 | 概念資料與合成場景 | T02 architecture contracts；必要實驗/安裝需 implementation gate | 五條 invariant 與資料邊界確定；M1 必需能力通過選型，不等待 M2 AI/renderer；未安裝依賴 |
 | M1 Foundation + Workspace | T03、T07 foundation，T04–T06 工作區與驗收；Evidence、職缺、送出、互動、面試、下一步 | 可建立/編輯經歷，查回投給誰、投什麼及當時依據 | Evidence revisions、Opportunity、JD、Submission、Contact、Interaction、InterviewEvent、NextAction | M0；T04 依賴 T03 + T07 | M1-A–M1-H 全部 PASS，Evidence 已可用，日常不依賴 AI |
 | M2 差異化 MVP | T08–T15；重用 M1 經歷，四層策略、CV/Pack、檢查、輸出 | 一份 JD 產生可說清楚且一致的求職材料 | Story、Analysis、Positioning、Material、Finding，引用已有 Evidence | M1 已驗收；按需完成 T01 的 M2 能力決策 | MVP-01–MVP-12 全部 PASS；一真實 JD 完整跑通，第二 JD 驗證重用 |
 | M3 情境與回顧 | F01–F04；公司研究、情報差異、debrief、更新建議、強化 review | 下一次面試知道應問什麼、修什麼 | Research、Discrepancy、Interaction、Interview、Finding | 完整 MVP 已驗收 | 來源可追、衝突不被吞、回饋不直接改事實、無明確拒絕原因仍未知 |
 | Later | L01–L04；觀察、材料、比較、來源管理 | 有資料與使用需求後再擴充 | 現有資料衍生視圖為主 | M3 與新的需求證據 | 各自重新定義樣本、範圍及選型 gate；不默認開工 |
 
-目前沒有批准的團隊投入、每週工時與具體技術，因此交期與成本為 Insufficient evidence。本輪給依賴與退出條件，不虛構「幾週完成」。T01 按階段完成能力決策後估算相應工作，M1 不等待 AI 執行方式或 renderer 選定。
+目前沒有批准的團隊投入、每週工時與具體成本，因此交期與成本為 Insufficient evidence。本輪給依賴與退出條件，不虛構「幾週完成」。T01 已完成 M1 能力決策；M1 不等待 AI 執行方式或 M2 renderer 選定。
 
 ## 完整 MVP Task Backlog
 
@@ -65,10 +65,10 @@
 - Priority：P0；Phase：M0，M2 能力按需接續；Dependencies：T02。
 - Goal：在 Phase 0 邏輯架構後選擇最少可替換的能力，先處理 M1 儲存/介面/檔案，再於 M2 前處理 AI/輸出。
 - Inputs：既有 OSS_REUSE、T02 架構與不變條件、各階段必要樣本；不重做產品研究。
-- Outputs：每個能力的來源/version/license/介面/成本/資料範圍/退出方式、批准記錄；批准後完成樣本實驗報告。
-- Acceptance Criteria：每項必要能力至少比較兩條路線或具體 fallback；文檔證據與執行證據分開；不引入禁止 infra；選型批准後才安裝及驗證。M1 依賴只要求 M1 能力決策完成；T08/T14 前各自補齊所需的 M2 能力決策。
-- Validation Method：官方來源調查；經批准用合成履歷測輸出、最小資料測備份、最小 prompt 測結構化回傳。候選失敗換現成候選，不自動自建。
-- [ ] 完成比較、提交具體選型；批准後完成樣本試驗，記錄通過條件與限制。
+- Outputs：每個能力的來源/version/license/介面/成本/資料範圍/退出方式、M1 capability decision；implementation kickoff 後再完成樣本實驗報告。
+- Acceptance Criteria：每項必要能力至少比較兩條路線或具體 fallback；文檔證據與執行證據分開；不引入禁止 infra；M1 capability boundary 決定完成後，才可在後續 implementation gate 安裝及驗證。M1 依賴只要求 M1 能力決策完成；T08/T14 前各自補齊所需的 M2 能力決策。
+- Validation Method：官方來源調查與 license/release/activity/runtime compatibility audit；實作後經批准用合成履歷測輸出、最小資料測備份、最小 prompt 測結構化回傳。候選失敗換現成候選，不自動自建。
+- [x] 2026-09-12：完成 M1 SQLite/native filesystem/fflate/Electron/React/Vite/node:test capability selection；無依賴安裝、無產品程式。Exact pin、Electron native-addon compatibility probe 與樣本試驗留給 implementation gate。
 
 ### T02：Phase 0 邏輯架構與事實、版本邊界
 
@@ -295,4 +295,4 @@ flowchart TD
 
 T15 完成由 coordinator 查看實際產物與驗證結果後決定。只完成 prompt、後端、測試或 subagent 回報均不足以宣稱 MVP 完成。
 
-本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。Career 2.0 independent Git baseline = `74e05d0bdd20e55453b64504bd04d77bb408ed86`；T02 已完成。實作、產品測試、依賴安裝、framework 選型、AI/provider/renderer 選型均未開始；Engineering Memory 未 bootstrap、未 binding。NEXT = T01 M1 capability selection，之後 M1 vertical slice。
+本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。Career 2.0 independent Git baseline = `74e05d0bdd20e55453b64504bd04d77bb408ed86`；T01/T02 已完成。M1 capability selection 已記錄；實作、產品測試、依賴安裝、runtime probe、AI/provider/renderer 選型均未開始；Engineering Memory 未 bootstrap、未 binding。NEXT = M1 vertical slice。

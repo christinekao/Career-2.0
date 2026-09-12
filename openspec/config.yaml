@@ -1,0 +1,44 @@
+schema: spec-driven
+
+context: |
+  Project: Career 2.0.
+  Product direction and frozen invariants: PLAN.md.
+  Product semantics: docs/PRODUCT_PLAN.md.
+  Current architecture: docs/architecture/CURRENT_ARCHITECTURE.md.
+  Capability and OSS decisions: docs/OSS_REUSE.md.
+  Current behavioral specifications: openspec/specs/.
+  Individual change lifecycle: OpenSpec changes under openspec/changes/.
+  Cross-project engineering lessons: Engineering Memory is optional reference only.
+  Baseline specs describe APPROVED_TARGET_BEHAVIOR_FOR_CURRENT_M1_SCOPE; they do not claim implementation.
+  Core invariants:
+    - Career Evidence is canonical truth.
+    - Generated CV / Interview Story cannot become career truth automatically.
+    - CV and Interview Story derive from the same Evidence.
+    - Submitted materials are immutable historical snapshots.
+    - Opportunity is the center of the workflow.
+  Architecture constraints:
+    - local-first, one local application writer, no required network or cloud.
+    - private data root is user-configured and outside Git.
+    - SQLite persistence is selected for M1 behind a replaceable boundary.
+    - native filesystem and hash handling are preferred.
+    - submission snapshots are immutable and backup/restore is deterministic.
+
+rules:
+  proposal:
+    - Keep the change narrow and state non-goals explicitly.
+    - Do not replace PLAN.md, the product plan, or the architecture authority.
+  specs:
+    - Describe observable behavior and preserve the five Career 2.0 invariants.
+    - Do not treat generated content as canonical Career Evidence.
+  design:
+    - Keep the one-writer local application boundary; do not add a server, sync, agent, or router layer.
+  tasks:
+    - Pair implementation work with deterministic validation and keep tasks independently verifiable.
+
+operations:
+  apply:
+    guidance:
+      - Stop and surface any semantic conflict with the product plan or architecture authority.
+  archive:
+    guidance:
+      - Do not treat completion of an OpenSpec change as an Engineering Memory lesson automatically.

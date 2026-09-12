@@ -8,6 +8,8 @@
 
 **Tech Stack:** T01 已完成 M1 capability boundary：SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3。Exact lockfile/version recheck、安裝、runtime probe 與 implementation 仍未開始；本文不指定程式檔案、函式或 executable schema，遵守使用者 DO NOT CODE / DO NOT CREATE SCHEMAS 的限制。
 
+**Change Workflow:** OpenSpec 是 Career 2.0 的 project-local change-management layer；本文件仍是 milestone/roadmap 與 task authority。`establish-m1-foundation` 已提出並完成 planning artifacts，尚未 apply。
+
 **Spec:** [PRODUCT_PLAN.md](../../PRODUCT_PLAN.md)。T00 產品範圍已凍結；其餘工作未執行。完成規劃不代表任何 implementation task 完成。
 
 ## 全域約束
@@ -19,6 +21,8 @@
 - 不建 Auto Apply、mass submission、自製 agent/model/browser/resume-layout/provider infrastructure、complex analytics、full CRM。
 - JOB_DISCOVERY = LATER；MVP = NOT A JOB SEARCH ENGINE。
 - 本文件只規劃。產品範圍已批准並凍結；具體工具另按能力需求選型。本輪不建立 repo、安裝相依或啟動實作。
+- OpenSpec 僅管理個別 change 的 proposal、delta specs、design、tasks、apply、verify、sync/archive；不取代 PLAN、Product Plan、Current Architecture 或本文件。
+- ONE_OPENSPEC_CHANGE = ONE_COHERENT_BEHAVIORAL_OR_ENGINEERING_CHANGE；不把整個 M1 合成一個 change，也不為每個微小檔案編輯建立 change。
 - Frozen product invariants：Career Evidence 是職涯事實權威；生成 CV/Story 不自動成真相；CV/Story 同源；送出材料是不可變歷史快照；Opportunity 是流程中心。
 - M1 不含 lead scoring、contact pipeline、organization CRM、outreach campaign、automation；Interaction 限九項輕量紀錄。
 
@@ -31,12 +35,13 @@
 | 本文件 | 階段、工作項目、依賴、驗收與 exit criteria |
 | docs/architecture/CURRENT_ARCHITECTURE.md | 實際現況與 Proposed 明確分開，統一架構圖入口 |
 | docs/architecture/diagrams/*.md | 五個邊界/責任/資料/交付視圖 |
+| openspec/specs/、openspec/changes/ | Current approved behavioral specs 與個別 change lifecycle；不取代上列產品、架構與 roadmap authority |
 
 批准選型後，第一個 implementation task 才依實際 framework 定義精確 module/file 路徑、介面及測試命令；不在未知技術上偽造可執行計畫。每項工作應可單獨評審，setup 與必要測試跟著該項交付。
 
 ## 階段與退出標準
 
-執行前置順序（Career 2.0 current baseline）：T00 Plan Freeze → 建立獨立 Career 2.0 Git repo → T02 Phase 0 architecture → T01 OSS capability selection → M1 vertical slice。Engineering Memory 不在此順序內，也不是本案 governance、architecture、lifecycle、repository 或 validator。既有 task IDs 保留，編號不代表執行先後。
+執行前置順序（Career 2.0 current baseline）：T00 Plan Freeze → 建立獨立 Career 2.0 Git repo → T02 Phase 0 architecture → T01 OSS capability selection → reviewed OpenSpec M1 changes → M1 vertical slice。Engineering Memory 不在此順序內，也不是本案 governance、architecture、lifecycle、repository 或 validator。既有 task IDs 保留，編號不代表執行先後。
 
 | 階段 | 目標/範圍 | 使用者可見成果 | 主要資料 | 依賴 | 驗證與退出條件 |
 | --- | --- | --- | --- | --- | --- |
@@ -47,6 +52,14 @@
 | Later | L01–L04；觀察、材料、比較、來源管理 | 有資料與使用需求後再擴充 | 現有資料衍生視圖為主 | M3 與新的需求證據 | 各自重新定義樣本、範圍及選型 gate；不默認開工 |
 
 目前沒有批准的團隊投入、每週工時與具體成本，因此交期與成本為 Insufficient evidence。本輪給依賴與退出條件，不虛構「幾週完成」。T01 已完成 M1 能力決策；M1 不等待 AI 執行方式或 M2 renderer 選定。
+
+## OpenSpec change workflow
+
+需要／已批准的 roadmap task → OpenSpec explore（optional）→ propose → proposal + delta specs + design + tasks → apply → verify → sync specs → archive。
+
+Explore 不要求用於 obvious changes；對 trivial non-product maintenance，若 OpenSpec 不增加可審查價值可不建立 change。每個 change 必須能獨立理解、實作、驗證與封存；完成的 OpenSpec change 不自動成為 Engineering Memory lesson。
+
+目前第一個 change 是 `establish-m1-foundation`：planning 已 READY，implementation 未開始。後續 M1 implementation 需先 review 此 change，再明確進入 apply。
 
 ## 完整 MVP Task Backlog
 
@@ -295,4 +308,4 @@ flowchart TD
 
 T15 完成由 coordinator 查看實際產物與驗證結果後決定。只完成 prompt、後端、測試或 subagent 回報均不足以宣稱 MVP 完成。
 
-本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。Career 2.0 independent Git baseline = `74e05d0bdd20e55453b64504bd04d77bb408ed86`；T01/T02 已完成。M1 capability selection 已記錄；實作、產品測試、依賴安裝、runtime probe、AI/provider/renderer 選型均未開始；Engineering Memory 未 bootstrap、未 binding。NEXT = M1 vertical slice。
+本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。Career 2.0 independent Git baseline = `74e05d0bdd20e55453b64504bd04d77bb408ed86`；T01/T02 已完成。M1 capability selection 已記錄；OpenSpec `establish-m1-foundation` 已完成 planning、尚未 apply；實作、產品測試、依賴安裝、runtime probe、AI/provider/renderer 選型均未開始；Engineering Memory 未 bootstrap、未 binding。NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY。

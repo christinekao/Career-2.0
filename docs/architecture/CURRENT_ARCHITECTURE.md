@@ -1,6 +1,6 @@
 # 架構現況與提案邊界
 
-現況更新：2026-09-12，Plan Frozen R1。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`）；T02 M1 executable architecture contracts 與 T01 M1 capability selection 已完成；產品實作尚未開始。
+現況更新：2026-09-12，Plan Frozen R1。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`）；T02 M1 executable architecture contracts 與 T01 M1 capability selection 已完成；OpenSpec 1.9.0 project-local change workflow 已採用；產品實作尚未開始。
 
 ## 已觀察現況
 
@@ -19,7 +19,11 @@
 
 最新使用者 scope review 為 R1 凍結依據：Career Evidence + Opportunity 同為 M1 foundation；其上是 M1 Workspace，再 M2 Intelligence；完整 MVP = M1 + M2。五條 frozen invariant 見 [產品規劃](../PRODUCT_PLAN.md)。附件是需求來源，OSS 文件只是參考。新案與 canonical repo 身份是 Career 2.0，不延伸舊 Job-Ops；正式對外品牌尚未決定。
 
-交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → M1 vertical slice。既有圖是凍結產品規則與 Proposed 技術邊界的紀錄；T02 契約與 T01 capability boundary 已補足 M1 開工前語意，但不代表產品功能已上線。
+交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → reviewed OpenSpec changes → M1 vertical slice。既有圖是凍結產品規則與 Proposed 技術邊界的紀錄；T02 契約與 T01 capability boundary 已補足 M1 開工前語意，但不代表產品功能已上線。
+
+OpenSpec 的責任是 project-local 的個別 change lifecycle：proposal、delta specs、design、tasks、apply、verify、sync/archive。它不取代 PLAN、PRODUCT_PLAN、CURRENT_ARCHITECTURE 或 OSS_REUSE 的 authority；`openspec/specs/` 的 baseline 是 approved target behavior，不是已實作證明。T01/T02 只保留為 PRE_OPENSPEC_BASELINE_HISTORY，不重建為 OpenSpec historical changes。Engineering Memory 仍是 optional cross-project learning，沒有 runtime、binding 或同步關係。
+
+Change sizing rule：`ONE_OPENSPEC_CHANGE = ONE_COHERENT_BEHAVIORAL_OR_ENGINEERING_CHANGE`。M1 不合併成單一巨型 change，也不為每個微小檔案編輯建立 change。
 
 ## 五張圖
 

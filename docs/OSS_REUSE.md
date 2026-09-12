@@ -2,7 +2,7 @@
 
 查閱日期：2026-09-12。T01 已完成 current-source capability audit；只查官方文件、官方 repository/release 與 package registry，沒有安裝、執行或複製程式。頁面內容會變動；implementation kickoff 仍須重新確認 release、授權檔、相依套件與 runtime compatibility。
 
-2026-09-12 scope freeze 註記：沿用本次參考研究，不重新擴張產品研究。Project Mother bootstrap、Career 2.0 canonical repo 與 T02 Phase 0 architecture 已完成；本文件的 T01 section 記錄 M1 capability boundary。這是概念選型，不代表已安裝或已完成 implementation validation；AI/renderer 等 M2 能力仍按需另選，不能阻擋 M1。
+2026-09-12 scope freeze 註記：沿用本次參考研究，不重新擴張產品研究。Career 2.0 independent Git baseline 與 T02 Phase 0 architecture 已完成；本文件的 T01 section 記錄 M1 capability boundary。Engineering Memory 僅為 optional cross-project reference，沒有 bootstrap/binding 或 runtime dependency。這是概念選型，不代表已安裝或已完成 implementation validation；AI/renderer 等 M2 能力仍按需另選，不能阻擋 M1。
 
 ## 1. 目前可確認的參考
 

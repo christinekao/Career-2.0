@@ -334,11 +334,13 @@ CV 內容與真實文件預覽是主要視覺資產，不使用無關 stock phot
 
 階段、完整 MVP task backlog、DAG 與 PASS 標準見 [實施計畫](superpowers/plans/2026-09-11-career-2-product-delivery.md)。現況與五張架構圖見 [CURRENT_ARCHITECTURE.md](architecture/CURRENT_ARCHITECTURE.md)。
 
-產品核心與 M1/M2 邊界已依本輪調整凍結，不再重新研究或 brainstorm 功能。接續順序為：**Plan Freeze → Project Mother bootstrap → Career 2.0 canonical repo → Phase 0 architecture → OSS capability selection → M1 Foundation / Workspace vertical slice → M2 Intelligence**。
+產品核心與 M1/M2 邊界已依本輪調整凍結，不再重新研究或 brainstorm 功能。目前交付順序為：**Plan Freeze → Career 2.0 independent Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → reviewed OpenSpec changes → M1 Foundation / Workspace vertical slice → M2 Intelligence**。
 
-本輪只完成 freeze，bootstrap 未執行。下一步應讀取實際 Project Mother 的權威入口及 bootstrap 規則，不自行發明 bootstrap 流程；新案是 Career 2.0。具體能力選型仍需依原定流程記錄採用/替換方式與批准；M2 的 AI/renderer 選型不應阻擋 M1 無 AI 的工作區。Phase 0 架構先定邏輯邊界，選型後才定實作細節。
+R1 freeze 當時只完成規劃；後續已建立獨立 Git baseline，完成 T02、T01 M1 選型並採用 OpenSpec，進展以 [PROGRESS.md](../PROGRESS.md) 與 change artifacts 為準。Career 2.0 自行決定產品與交付；Engineering Memory 僅為 optional cross-project reference，沒有 runtime dependency。M2 的 AI/renderer 選型不應阻擋 M1 無 AI 的工作區；安裝、exact pin 與 runtime probe 仍是未執行的 implementation gate。
 
-## 最終狀態
+## R1 freeze 歷史狀態（2026-09-12）
+
+以下保留 freeze 當時的規劃 provenance，並非目前 Git、T01 或 OpenSpec 狀態；目前狀態見上節、[進度](../PROGRESS.md) 及 [架構](architecture/CURRENT_ARCHITECTURE.md)。
 
 PRODUCT_DIRECTION = APPROVE_WITH_MINOR_ADJUSTMENTS（本輪三項調整已寫回）
 
@@ -381,4 +383,4 @@ USER_APPROVAL_REQUIRED_BEFORE_BUILD = YES
 
 CAPABILITY_SELECTION = PENDING（產品範圍批准不等於工具選型批准）
 
-NEXT = PROJECT MOTHER BOOTSTRAP（Career 2.0；未執行）
+當時記錄的 NEXT = PROJECT MOTHER BOOTSTRAP（Career 2.0；未執行）。此為歷史原計畫，已由上節的獨立專案交付順序取代，非現行前置條件。

@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Career 2.0 — Project Dashboard</title>
+<style>
+:root{color-scheme:light;--ink:#172b35;--muted:#50646f;--line:#cfdadd;--paper:#fff;--bg:#f3f6f7;--accent:#075e57;--soft:#e2f2ed;--pending:#785014}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 system-ui,-apple-system,"PingFang TC",sans-serif}main{max-width:1120px;margin:auto;padding:36px 24px 48px}header{border-top:5px solid var(--accent);padding:22px 0}h1{font-size:clamp(2rem,5vw,3rem);line-height:1.1;letter-spacing:-.03em;margin:8px 0 18px}h2{font-size:1.35rem;margin:0 0 14px}h3{font-size:1rem;margin:0 0 8px}p{margin:8px 0 14px}a{color:var(--accent);text-underline-offset:3px}a:hover{text-decoration-thickness:2px}a:focus-visible,summary:focus-visible{outline:3px solid #925b14;outline-offset:4px}.label{font:700 .72rem/1.5 system-ui,sans-serif;letter-spacing:.09em;color:var(--muted);display:block;margin-bottom:6px}.intro{font-size:1.2rem;max-width:850px}.meta{color:var(--muted);font-size:.88rem}.grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px}.pair{display:grid;grid-template-columns:1.2fr 1fr;gap:16px}.card,section.panel{background:var(--paper);border:1px solid var(--line);border-radius:10px;padding:22px}.card strong.value{display:block;font-size:1.4rem;line-height:1.3;margin:10px 0}.badge{display:inline-block;border-radius:5px;padding:3px 9px;font-size:.8rem;font-weight:700;background:var(--soft);color:var(--accent)}.badge.pending{background:#f8eddb;color:var(--pending)}.badge.neutral{background:#e9eef0;color:#3b505b}section{margin:22px 0}.flow{display:flex;align-items:stretch;gap:10px;margin:16px 0}.node{flex:1;border:1px solid var(--line);border-top:3px solid var(--accent);padding:13px;background:#f7faf9;border-radius:6px;min-width:0}.node b{display:block}.node small{display:block;color:var(--muted);margin-top:6px}.arrow{align-self:center;color:var(--muted)}ul,ol{padding-left:22px;margin:10px 0}li{margin:7px 0}.compact li{margin:4px 0}.rule{font-weight:650}.links{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px 20px}.links a{padding:6px 0;border-bottom:1px solid var(--line)}details{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:17px 22px;margin:22px 0}summary{font-weight:700;cursor:pointer}code{font-size:.86em;overflow-wrap:anywhere}dl{margin:10px 0}dt{font-size:.75rem;color:var(--muted);font-weight:700;margin-top:12px}dd{margin:3px 0;overflow-wrap:anywhere}footer{border-top:1px solid var(--line);padding-top:18px;font-size:.86rem;color:var(--muted)}.skip{position:absolute;left:-9999px}.skip:focus{position:fixed;left:16px;top:10px;background:white;padding:10px;z-index:1}@media(max-width:760px){main{padding:22px 16px}.grid,.pair,.links{grid-template-columns:1fr}.flow{flex-direction:column}.arrow{transform:rotate(90deg)}.card,section.panel{padding:18px}.intro{font-size:1.05rem}}
+</style>
+</head>
+<body>
+<a class="skip" href="#navigation">跳到專案導覽</a>
+<main>
+<header>
+<span class="label">PROJECT DASHBOARD · DERIVED VIEW</span>
+<h1>Career 2.0</h1>
+<p class="intro"><span class="label">PROJECT PURPOSE</span>以 Opportunity 為中心管理求職檔案，保存實際投遞版本與下一步；CV 與 Interview Story 共用 Career Evidence。</p>
+<p class="meta">第一版單人自用。完整 MVP = M1 Foundation / Workspace + M2 Intelligence。<a href="PRODUCT_PLAN.md">產品規劃</a> · <a href="../PLAN.md">Frozen plan R1</a></p>
+<p><span class="badge">Plan frozen · T01/T02 文件完成</span> <span class="badge pending">產品實作未開始</span></p>
+</header>
+<div class="grid">
+<article class="card"><span class="label">CURRENT STATUS</span><strong class="value">規劃完成，runtime 未建立</strong><p>已有獨立 Git repo、架構契約、M1 選型與 OpenSpec。尚無產品程式、安裝依賴或 runtime acceptance。</p><a href="../PROGRESS.md">查看進度</a></article>
+<article class="card"><span class="label">CURRENT MILESTONE</span><strong class="value">M1 Foundation</strong><p>目前先準備應用基礎；後續才交付 Career Evidence + Opportunity 與工作區。M1 尚未通過驗收。</p><a href="superpowers/plans/2026-09-11-career-2-product-delivery.md">Milestones / acceptance</a></article>
+<article class="card"><span class="label">CURRENT CHANGE</span><h2><code>establish-m1-foundation</code></h2><span class="badge">Planning ready · 4/4</span> <span class="badge pending">Tasks · 0/10</span><p>proposal、specs、design、tasks 齊備。下一步依既有流程 review，再另行 apply。本次只讀 change 狀態。</p><a href="../openspec/changes/establish-m1-foundation/tasks.md">目前 tasks</a> · <a href="../openspec/changes/establish-m1-foundation/proposal.md">Scope</a></article>
+</div>
+<section class="panel" id="architecture">
+<span class="label">ARCHITECTURE DASHBOARD · CURRENT_ARCHITECTURE</span>
+<h2>單一 local application，單一 canonical writer</h2>
+<p><span class="badge neutral">已定契約 / 選型，尚未實作</span> Career 2.0 application/domain 擁有寫入規則；renderer 只提出請求。私人 state 與檔案放在 Git 外。</p>
+<div class="flow" aria-label="已選定但尚未實作：React renderer 經 narrow preload IPC 到 Electron main 的唯一 writer，再存入 repo 外的 SQLite 與私人檔案。">
+<div class="node"><b>React renderer</b><small>顯示工作區；不直接寫 DB / private files</small></div><span class="arrow" aria-hidden="true">→</span>
+<div class="node"><b>Narrow preload / IPC</b><small>只傳遞 application commands</small></div><span class="arrow" aria-hidden="true">→</span>
+<div class="node"><b>Electron main</b><small>Application + domain；唯一 canonical writer</small></div><span class="arrow" aria-hidden="true">→</span>
+<div class="node"><b>Private root · Git 外</b><small>SQLite + private filesystem；不可靜默 fallback</small></div>
+</div>
+<p class="meta"><a href="architecture/CURRENT_ARCHITECTURE.md">CURRENT_ARCHITECTURE（權威）</a> · <a href="../openspec/changes/establish-m1-foundation/design.md">Current change design（working-tree planning）</a></p>
+<div class="pair">
+<div><h3>DEPENDENCIES</h3><p>T01 選定 Electron、React/Vite、SQLite + <code>better-sqlite3</code>；使用 native filesystem/hash/test APIs。<code>fflate</code> 只負責後續 M1 backup ZIP container，備份不在 foundation change 範圍。</p><p class="meta">均為 selection，非 installed inventory。Exact pins、native ABI 與樣本試驗尚待驗證；<a href="OSS_REUSE.md">版本快照、比較與退出方式</a>以 T01 為準。此頁不宣稱套件版本為最新。</p></div>
+<div><h3>CRITICAL RULES · VALIDATION_STATUS</h3><ul class="compact"><li>Private root 不可用時 fail closed。</li><li>同 root 的第二個 Career 2.0 process 不可取得寫入權；外部任意檔案編輯不在全域防護承諾內。</li><li>Electron SQLite probe 失敗就停下重評，不可靜默換 driver。</li><li>Offline startup、ownership、persistence reopen：<strong>NOT_YET_TESTED</strong>。</li></ul></div>
+</div>
+</section>
+<section class="panel" id="invariants">
+<span class="label">APPROVED PROJECT INVARIANTS</span><h2>五條產品規則</h2>
+<ol class="rule"><li>Career Evidence is canonical truth.</li><li>Generated CV / Story never becomes career truth automatically.</li><li>CV and Interview Story derive from the same Evidence.</li><li>Submitted materials are immutable historical snapshots.</li><li>Opportunity is the center of the workflow.</li></ol>
+<a href="PRODUCT_PLAN.md">完整凍結語意與未知歷史材料規則</a>
+</section>
+<div class="pair">
+<section class="card" id="decisions"><span class="label">KEY_DECISIONS</span><h2>重要決策</h2><ul><li><a href="DECISION_LOG.md#c2-d001">Local-first / private root outside Git</a></li><li><a href="DECISION_LOG.md#c2-d003">Single canonical writer</a></li><li><a href="DECISION_LOG.md#c2-d004">SQLite + better-sqlite3 / Electron</a></li><li><a href="DECISION_LOG.md#c2-d006">Immutable Evidence revisions / Submitted snapshots</a></li><li><a href="DECISION_LOG.md#c2-d008">Project-local OpenSpec</a></li><li><a href="DECISION_LOG.md#c2-d009">Engineering Memory 是 optional reference</a></li></ul><p class="meta">Decision Log 索引既有決策；authority 留在原來源。</p></section>
+<section class="card"><span class="label">OPEN_DECISIONS</span><h2>待決與待驗證</h2><ul><li>Foundation 的 exact lockfile pins 與 Electron native-addon 相容性。</li><li>Per-root process ownership mechanism：design 有約束，尚未實作定案。</li><li>M2 AI/model/provider 與 CV/PDF renderer：延後，不阻擋 M1。</li><li>正式品牌、投入工時、日程與成本：尚無充分證據。</li></ul><p class="meta"><a href="../openspec/changes/establish-m1-foundation/design.md">Foundation design / risks</a> · <a href="architecture/CURRENT_ARCHITECTURE.md">Architecture / deferred</a> · <a href="superpowers/plans/2026-09-11-career-2-product-delivery.md">Roadmap</a></p></section>
+</div>
+<section class="panel" id="validation">
+<span class="label">VALIDATION STATUS</span><h2>文件有證據，產品行為尚未證明</h2>
+<div class="grid"><div><span class="badge">PROVEN · 文件 / specs</span><p>OpenSpec strict validation：7 passed / 0 failed。Planning artifacts：4/4 complete；tasks：0/10。</p></div><div><span class="badge pending">NOT_PROVEN · runtime</span><p>離線啟動、ABI、private-root failure、single writer、initialize/reopen、immutable revisions / snapshots 均未執行驗證。</p></div><div><span class="badge neutral">NOT_YET_TESTED · product UI</span><p>M1-A–M1-H、M2 MVP acceptance 與真實工作流程未測。此靜態頁檢查不代表產品 UI 驗收。</p></div></div>
+<p><strong>IMPLEMENTED != VALIDATED · DOCUMENTED != EXECUTED</strong></p><a href="VALIDATION_SUMMARY.md">檢查紀錄、限制、source hashes 與 freshness</a>
+</section>
+<details id="history"><summary>RECENT IMPORTANT CHANGES · WHAT_CHANGED / WHY_IT_CHANGED</summary><ul><li><strong>2026-09-13 — Starter Kit：</strong>新增文件導覽、決策及驗證索引；清除現行 Project Mother dependency 舊措辭，保留 freeze 歷史。目的：讓目前狀態與 authority 可直接查閱。<a href="../PROGRESS.md">進度</a></li><li><strong>2026-09-12 — OpenSpec：</strong><code>9b76e54</code> 將個別 change 做成可審查的 proposal/spec/design/tasks；不取代既有權威。<a href="../openspec/config.yaml">Config</a></li><li><strong>2026-09-12 — T01：</strong><code>a9412b1</code> 選定 M1 最小可替換能力，接續 T02，不等待 M2 AI。<a href="OSS_REUSE.md">能力決策</a></li><li><strong>2026-09-12 — T02：</strong><code>6230a08</code> 明確定義 state、revision、snapshot、privacy、backup 與 writer 契約，作為選型與實作前提。<a href="architecture/CURRENT_ARCHITECTURE.md">架構契約</a></li><li><strong>2026-09-12 — 獨立 Git baseline：</strong><code>74e05d0</code> 建立 Career 2.0 自有 repo。<a href="../PROGRESS.md">紀錄</a></li></ul><p class="meta">Active change 的三份既有未提交編輯包含在此頁 source set，不把它們宣稱為已提交或已執行。</p></details>
+<section class="panel" id="navigation">
+<span class="label">PROJECT NAVIGATION · AUTHORITATIVE SOURCE LINKS</span><h2>專案導覽</h2>
+<nav class="links" aria-label="專案文件"><a href="../PLAN.md">Plan / frozen scope</a><a href="PRODUCT_PLAN.md">Product Plan</a><a href="../PROGRESS.md">Progress</a><a href="architecture/CURRENT_ARCHITECTURE.md">Current Architecture / 五圖索引</a><a href="OSS_REUSE.md">OSS / capability decisions</a><a href="superpowers/plans/2026-09-11-career-2-product-delivery.md">Milestones / tasks / acceptance</a><a href="../openspec/specs/">OpenSpec baseline specs</a><a href="../openspec/changes/establish-m1-foundation/">Current OpenSpec change</a><a href="../openspec/config.yaml">OpenSpec context / authority</a><a href="DECISION_LOG.md">Decision Log</a><a href="VALIDATION_SUMMARY.md">Validation Summary</a><a href="architecture/diagrams/change-delivery-flow.md">Change Delivery Flow</a><a href="architecture/diagrams/workspace-boundary-map.md">Workspace Boundary Map</a><a href="architecture/diagrams/repository-responsibility-map.md">Repository Responsibility Map</a><a href="architecture/diagrams/authority-ownership-map.md">Authority and Ownership Map</a><a href="architecture/diagrams/runtime-data-flow-map.md">Runtime and Data Flow Map</a></nav>
+<p class="meta">連結指向 repo 中的原檔案；Markdown / YAML 可用編輯器閱讀，目錄連結的呈現依本機瀏覽器而異。概念圖不代表 runtime 已存在；current contracts 以 Current Architecture 為準。</p>
+</section>
+<section class="panel"><span class="label">MEANINGFUL PROJECT CASES</span><h2>尚無 Casebook，等待有證據的案例</h2><p>Project Casebook / Interview Story candidate layer：<strong>ABSENT_BY_DESIGN</strong>。未建立空目錄、假案例或 Story placeholder。發生有意義且經驗證的工程案例後再使用 ADD_CASE；不自動形成 CV 或面試 claim。</p></section>
+<footer id="freshness"><span class="label">FRESHNESS · MANUAL SNAPSHOT</span><dl><dt>LAST_REFRESHED</dt><dd>2026-09-13T03:27:52+08:00</dd><dt>SOURCE_REVISION</dt><dd><code>9b76e54c0f1f8596c2442e3d48649109d138a2ea+source-set-sha256:089ba608972faaf107606da5950339a97655b8e5be163cadfd420855147509c1</code></dd><dt>FRESHNESS_STATUS</dt><dd><strong>CURRENT</strong> — 已核對下列具名來源集合；不是持續更新狀態。</dd></dl><p>來源包含本次 authority wording corrections 與三份既有未提交 OpenSpec edits，不能只由 base commit 還原全部內容。<a href="VALIDATION_SUMMARY.md#source-state">完整 source manifest / 重查方法</a>。相關來源變動後需人工刷新；已知不同標 STALE，無法比較標 UNKNOWN。沒有 watcher。</p><p><strong>DASHBOARD_IS_SOURCE_OF_TRUTH = NO</strong> · CAREER_2_PROJECT_AUTHORITY = CAREER_2<br>ENGINEERING_MEMORY_SUGGESTS = TRUE · CAREER_2_DECIDES = TRUE<br>Engineering Memory = OPTIONAL_CROSS_PROJECT_REFERENCE · RUNTIME_DEPENDENCY = NONE</p></footer>
+</main>
+</body>
+</html>

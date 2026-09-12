@@ -20,3 +20,12 @@
 - OpenSpec 與 Engineering Memory 分工：OpenSpec 問「現在要改 Career 2.0 什麼」；Engineering Memory 僅供跨專案可重用教訓參考，不自動互相同步。
 - NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY。M1 implementation 尚未開始；不等待 M2 AI/renderer 能力選型。
 - IMPLEMENTATION = NOT_STARTED。
+
+## 2026-09-13 Starter Kit bounded INITIALIZE
+
+- 專案入口：[Project Dashboard](docs/project-dashboard.html)，含 architecture derived view；[Decision Log](docs/DECISION_LOG.md) 索引既有決策；[Validation Summary](docs/VALIDATION_SUMMARY.md) 區分文件檢查與未測 runtime。三者均不取代既有權威。
+- CAREER_2_PROJECT_AUTHORITY = CAREER_2；ENGINEERING_MEMORY_SUGGESTS = TRUE；CAREER_2_DECIDES = TRUE；Engineering Memory 是 OPTIONAL_CROSS_PROJECT_REFERENCE，dependency = NONE。
+- 修正現行入口、交付順序與圖中的 Project Mother/bootstrap 舊措辭；R1 freeze 歷史 provenance 保留並明示日期。
+- `establish-m1-foundation` planning artifacts 完整，tasks 為 0/10；本次不 apply、不改 scope、不完成 tasks、不 sync/archive。既有三份未提交的 change edits 保留。
+- Casebook 與 Interview Story candidate layer 維持 ABSENT_BY_DESIGN，等有實際且經驗證的工程案例才使用 ADD_CASE。沒有新 runtime、generator、watcher、database 或同步設施。
+- NEXT 維持 REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY；完整驗證邊界與本次來源版本見 Validation Summary。

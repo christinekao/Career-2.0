@@ -70,7 +70,7 @@ Explore 不要求用於 obvious changes；對 trivial non-product maintenance，
 - Inputs：本輪文字、附件、使用者已確認單人自用。
 - Outputs：R1 frozen 產品規劃、功能分期、使用者條件批准及調整完成記錄。
 - Acceptance Criteria：Evidence 提前至 M1；送出快照含當時證據引用且不可變；Interaction 不長成 CRM；五條 invariant 明列；M1 + M2 才是完整 MVP；不固定技術。
-- Validation Method：對照本輪三項調整、頁籤分期與 bootstrap 順序，檢查任務依賴及驗收一致。
+- Validation Method：對照本輪三項調整、頁籤分期與本案交付順序，檢查任務依賴及驗收一致。
 - [x] 2026-09-12：依使用者 APPROVE_WITH_MINOR_ADJUSTMENTS 指示寫回調整，產品範圍凍結為 R1。
 
 ### T01：現成能力比較與具體選型
@@ -87,7 +87,7 @@ Explore 不要求用於 obvious changes；對 trivial non-product maintenance，
 
 - Priority：P0；Phase：M0 / Phase 0；Dependencies：T00；Career 2.0 independent Git baseline 已完成。
 - Goal：明確定義每個寫入由誰負責、歷史如何保留，以及失敗如何恢復。
-- Inputs：Frozen PRODUCT_PLAN 第 0 節與 K–M、bootstrap 產出的 canonical 邊界；不依賴未完成的工具選型。
+- Inputs：Frozen PRODUCT_PLAN 第 0 節與 K–M、Career 2.0 independent Git baseline 的 canonical 邊界；不依賴未完成的工具選型。
 - Outputs：邏輯資料/責任/讀寫契約、私人資料位置要求、備份範圍與合成場景；選型後於 T03/T07 落實實際檔案與介面。
 - Acceptance Criteria：Career Evidence + Opportunity 同為 foundation；事實/草稿/快照不同；引用鎖定 revision；送出內容、時間、職缺、來源與當時引用不可變；多視窗舊寫入需拒絕或比較；刪除/備份政策可說明；不先建立 framework/schema。
 - Validation Method：桌面推演 Evidence 修訂、檔案移動、重複投遞、備份還原、AI 舊回應，將必測不變條件交 T01 評估及 M1/M2 執行。
@@ -240,8 +240,7 @@ Explore 不要求用於 obvious changes；對 trivial non-product maintenance，
 
 ```mermaid
 flowchart TD
-    T00[T00 Plan Frozen] --> B[Project Mother bootstrap]
-    B --> C[Career 2.0 canonical repo]
+    T00[T00 Plan Frozen] --> C[Career 2.0 independent Git baseline]
     C --> T02[T02 Phase 0 architecture]
     T02 --> T01[T01 M1 能力選型與批准]
     T01 --> T03[T03 Opportunity Foundation]

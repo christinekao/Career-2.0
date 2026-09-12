@@ -8,7 +8,9 @@ PLAN = APPROVED / FROZEN
 
 IMPLEMENTATION = NOT_STARTED
 
-NEXT = PROJECT MOTHER BOOTSTRAP
+NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY（establish-m1-foundation）
+
+專案導覽：[Project Dashboard](docs/project-dashboard.html)（衍生視圖；不取代下列權威文件）。
 
 **產品核心：每個職缺都有一份可持續更新的求職檔案，幫你決定怎麼投、怎麼講、接下來做什麼。**
 
@@ -41,8 +43,8 @@ M1 Opportunity 頁籤：Overview、Interactions、Application、Documents。Care
 
 交付節奏：M1 Foundation（Career Evidence + Opportunity）→ M1 Workspace → M2 Intelligence，兩階段合計才是完整 MVP；M3 及 Later 維持既定範圍。
 
-已完成：產品及實施規劃、公開 OSS 文件調查、概念架構。未開始：產品程式、repo 初始化、相依安裝、schema、固定 framework/model/provider、部署。
+已完成：產品及實施規劃、獨立 Git baseline、T02 架構契約、T01 M1 能力選型、第一個 OpenSpec change 的 planning artifacts。未開始：產品程式、相依安裝、schema、runtime probe、部署；M2 model/provider 選型仍延後。
 
-接續順序：Plan Freeze → Project Mother bootstrap → Career 2.0 canonical repo → Phase 0 architecture → OSS capability selection → M1 vertical slice。
+目前交付順序：Plan Freeze → Career 2.0 independent Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → reviewed OpenSpec changes → M1 vertical slice。
 
-本輪只完成 freeze，bootstrap 未執行。下一步應依實際 Project Mother 權威入口進行；本文件不自製 bootstrap 命令。產品範圍已批准，候選工具仍需依後續能力選型流程處理。
+2026-09-12 R1 freeze 當時只完成規劃；後續 Git、T02、T01 與 OpenSpec 進展見 [PROGRESS.md](PROGRESS.md)。Career 2.0 自行擁有產品、架構與交付權威；Engineering Memory 僅為 optional cross-project reference，不是 bootstrap 前置條件，沒有 runtime dependency。

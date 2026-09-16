@@ -2,30 +2,33 @@
 
 開始日期：2026-09-11；minor scope review 與 R1 freeze：2026-09-12。
 
+## Current status — 2026-09-16
+
+- M1 Foundation hardening implementation is complete within the user's approved threat model: pre-existing static symlink/hard-link confinement, Darwin recovery-path validation, stale-recovery concurrency, and non-Darwin stale-claim crash/takeover regressions pass. Active same-user .career2 replacement between path validation and the filesystem open syscall remains unmitigated, explicitly out of scope for M1, and retained as a skipped future-hardening fixture; it is not claimed fixed. Foundation tests are 17 PASS / 1 SKIPPED / 0 FAIL; build and OpenSpec strict pass. H5 PASS on 2026-09-16: fresh PID 79150 loaded the actual Career 2.0 main entry, created a BrowserWindow, reached ready-to-show with isVisible=true, isMinimized=false, isDestroyed=false, and 900x680 bounds, loaded the local renderer, exercised preload and the narrow getStatus IPC capability, initialized the synthetic private root and READY store version 1 with expected identity/root binding, held an 8-second visible observation window, and exited with code 0 / signal null after ownership reacquisition. The user observed the Career 2.0 window during that interval. No OS approval prompt was observed for the final run. Read-only M1 acceptance review PASS；OpenSpec sync/archive complete；M1 Foundation = ACCEPTED_AND_ARCHIVED.
+- Product-domain schema、Evidence/Opportunity workflows 與其他產品功能尚未實作或 accepted；本輪沒有改變 M1/M2 範圍或 dependency versions。
+
 - 已確認：全新產品，第一版單人自用，平靜的 Opportunity 工作區，Job Discovery 延後。
 - 已交付：產品定義、完整功能分期、概念模型/事實規則、OSS 候選、MVP backlog/依賴/驗收、五張 Mermaid 架構圖。
-- 已確認現況：開始時工作目錄為空；目前沒有本案程式，已建立獨立 Git repo，baseline commit 為 `74e05d0bdd20e55453b64504bd04d77bb408ed86`。
+- 已確認現況：工作目錄起初為空；已建立獨立 Git repo，baseline commit 為 `74e05d0bdd20e55453b64504bd04d77bb408ed86`。目前已有 Foundation source/tests 與 Electron/React/Vite skeleton；M1 product-domain workflows/schema 尚未實作。
 - 來源調查限制：Job Tracker 頁面未取得可檢視內容；Career Ops 使用明列候選，不能確定使用者指的是哪個同名專案。
-- 未執行：產品 OSS 依賴安裝/試跑、產品程式、schema、runtime、UI prototype、PDF 輸出、產品 acceptance tests；Engineering Memory 未 bootstrap 或 binding。
+- 2026-09-13 規劃快照：當時尚未執行產品依賴安裝/試跑、程式、schema、runtime、UI prototype、PDF 輸出或產品 acceptance tests。此快照不代表目前 Foundation 狀態；Engineering Memory 仍為 optional cross-project reference，沒有 runtime dependency。
 - Scope review：Evidence 已移到 M1 foundation；Submitted Material 的內容/時間/職缺/來源/當時 Evidence 引用不可變；M1 Interaction 九項紀錄及非 CRM 邊界明列。
 - Frozen：五條 product invariants；M1 四個可用頁籤；M2 intelligence；完整 MVP = M1 + M2。
-- 文件檢查通過：11 份 Markdown 的本地連結與 code fences 完整；16 個核心任務欄位齊備、依賴無循環；T04/T06 必須先有 T07 Evidence；Phase 0 在選型前；8 項 M1 + 12 項完整 MVP 驗收與五條 invariant 齊備。Mermaid 為文件原稿，未做瀏覽器渲染驗收；產品測試未執行。
-- PLAN = APPROVED / FROZEN（R1）；T00、T01、T02 完成；其餘 implementation task 未執行。
+- 規劃文件檢查（2026-09-13 snapshot）通過：本輪指定規劃文件的本地連結與 code fences 完整；16 個核心任務欄位齊備、依賴無循環；T04/T06 必須先有 T07 Evidence；Phase 0 在選型前；8 項 M1 + 12 項完整 MVP 驗收與五條 invariant 齊備。Mermaid 為文件原稿，未做瀏覽器渲染驗收；當時產品測試未執行。
+- PLAN = APPROVED / FROZEN（R1）；T00、T01、T02 完成。M1 Foundation implementation、acceptance、OpenSpec sync/archive 已完成；目前狀態以本節與 `openspec/changes/archive/2026-09-16-establish-m1-foundation/` 為準；M1 product-domain workflows 尚未實作。
 - T02 已完成：M1 persistence、file/attachment、canonical/generated/derived/immutable、revision、submission、privacy、backup/restore、single-writer 與 validation contracts 已記錄在 CURRENT_ARCHITECTURE.md。
-- T01 已完成：選定 SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3；比較、current-source audit、依賴邊界與退出方式記錄在 OSS_REUSE.md。沒有安裝依賴或建立 implementation。
-- T01 限制：exact lockfile pin、Electron native-addon compatibility probe、樣本試驗與實作 gate 尚未執行；失敗時必須停下重評，不可靜默替換。
-- OpenSpec 已採用為 Career 2.0 project-local change workflow（CLI 1.9.0，Codex Skills-only）；`openspec/specs/` 是 approved target behavior baseline，不宣稱已實作。
+- T01 已完成：選定 SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3；比較與選型 provenance 在 OSS_REUSE.md。T01 當時尚未安裝依賴；後續 `establish-m1-foundation` 已建立並封存 Foundation runtime evidence。
+- Dependency gate：lockfile pin 與 ABI gate 於 2026-09-15 PASS；2026-09-16 曾有 Electron probe 在回報 ABI 結果前 SIGABRT，但後續 fresh PID 79150 的實際 H5 startup acceptance PASS，不能據此聲稱 ABI 不相容或改選 dependency。不得靜默替換版本。
+- OpenSpec 已採用為 Career 2.0 project-local change workflow（CLI 1.9.0，Codex Skills-only）；`openspec/specs/` 是 approved target behavior baseline；foundation implementation、hardening、acceptance 與 close-out evidence 保留於 `openspec/changes/archive/2026-09-16-establish-m1-foundation/`，不代表產品-domain 功能已實作。
 - PRE_OPENSPEC_BASELINE_HISTORY = T02 `6230a0832051a21d10cf439126b7fb67331c9c12` + T01 `a9412b155c21809cc84fdfd7616c84bf9932fe27`；未重建為 OpenSpec historical changes。
-- 第一個 change `establish-m1-foundation` 已完成 proposal、delta spec、design、tasks；CHANGE_STATUS = PROPOSED / PLANNING_READY；apply 尚未開始。
+- 2026-09-13 milestone：完成 Starter Kit bounded adoption；current change detail 與 lifecycle 由 OpenSpec artifacts 承接，本檔不追蹤 task count。
 - OpenSpec 與 Engineering Memory 分工：OpenSpec 問「現在要改 Career 2.0 什麼」；Engineering Memory 僅供跨專案可重用教訓參考，不自動互相同步。
-- NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY。M1 implementation 尚未開始；不等待 M2 AI/renderer 能力選型。
-- IMPLEMENTATION = NOT_STARTED。
 
 ## 2026-09-13 Starter Kit bounded INITIALIZE
 
-- 專案入口：[Project Dashboard](docs/project-dashboard.html)，含 architecture derived view；[Decision Log](docs/DECISION_LOG.md) 索引既有決策；[Validation Summary](docs/VALIDATION_SUMMARY.md) 區分文件檢查與未測 runtime。三者均不取代既有權威。
+- 文件角色完成收斂：PLAN.md 為 project overview；Decision Log 為 derived index；Validation Summary 僅保存 adoption snapshot；三者均不取代既有權威。
 - CAREER_2_PROJECT_AUTHORITY = CAREER_2；ENGINEERING_MEMORY_SUGGESTS = TRUE；CAREER_2_DECIDES = TRUE；Engineering Memory 是 OPTIONAL_CROSS_PROJECT_REFERENCE，dependency = NONE。
-- 修正現行入口、交付順序與圖中的 Project Mother/bootstrap 舊措辭；R1 freeze 歷史 provenance 保留並明示日期。
-- `establish-m1-foundation` planning artifacts 完整，tasks 為 0/10；本次不 apply、不改 scope、不完成 tasks、不 sync/archive。既有三份未提交的 change edits 保留。
+- 完成舊入口、交付順序與圖中文字的清理；R1 freeze 歷史 provenance 保留並明示日期。
+- 本次 adoption 保持 change scope 不變，未修改、apply、sync 或 archive OpenSpec artifacts；既有三份未提交的 change edits 保留。
 - Casebook 與 Interview Story candidate layer 維持 ABSENT_BY_DESIGN，等有實際且經驗證的工程案例才使用 ADD_CASE。沒有新 runtime、generator、watcher、database 或同步設施。
-- NEXT 維持 REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY；完整驗證邊界與本次來源版本見 Validation Summary。
+- Adoption snapshot 的驗證邊界與來源版本已留存於 Validation Summary；後續 runtime/product validation 不在本檔維護。

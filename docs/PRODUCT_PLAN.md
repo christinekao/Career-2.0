@@ -1,6 +1,6 @@
 # Career 2.0 產品規劃
 
-建立日期：2026-09-11；凍結日期：2026-09-12。PLAN = APPROVED / FROZEN，基線 R1；IMPLEMENTATION = NOT_STARTED。
+建立日期：2026-09-11；凍結日期：2026-09-12。PLAN = APPROVED / FROZEN，基線 R1。M1 Foundation hardening implementation 已依核准 threat model 完成並通過 read-only acceptance review；`establish-m1-foundation` 已完成 OpenSpec sync/archive。Active same-user path-swap 是明確 non-goal / future hardening，不宣稱已修復。H5 GUI startup validation PASS。Product-domain implementation = NOT_STARTED；目前狀態見 [PROGRESS.md](../PROGRESS.md)。
 
 ## 0. 決策與範圍
 
@@ -17,11 +17,11 @@
 | 第一版客群 | 單人、自用、已有真實經歷、正在針對數個職缺準備投遞或面試 |
 | 設計假設 | 以桌面深度準備為主，手機查看進度及快速補記；繁中介面、可產出英文 CV，均待實際使用驗證 |
 | 私人資料 | 與原始碼目錄分離；本次文件只有需求與假設案例 |
-| 技術選擇 | 僅候選與比較；未固定 framework、model、provider、browser 或 agent 工具 |
-| 授權界線 | 只做規劃文件；不建立 Git repo、不安裝、不建立程式 schema、不寫產品程式、不部署 |
+| 技術選擇 | M1 T01 能力選型已完成（SQLite + `better-sqlite3`、Electron、React/Vite、native filesystem/hash/test APIs、`fflate`）；M2 AI/provider/renderer 等後續能力另選，細節與 implementation gate 以 [OSS_REUSE.md](OSS_REUSE.md) 為準 |
+| 授權界線 | R1 freeze 時只做規劃；後續已建立獨立 Git repo、Foundation source 與 lockfile。M1 要求拒絕預先存在的 symlink/hard-link/out-of-root paths；same-user check-to-open path swap 明列為 M1 non-goal / future hardening。H5 GUI validation 與 M1 acceptance 已 PASS；狀態見 [PROGRESS.md](../PROGRESS.md) |
 | 發現職缺 | JOB_DISCOVERY = LATER；MVP = NOT A JOB SEARCH ENGINE |
 
-本輪使用者對方向給予 APPROVE_WITH_MINOR_ADJUSTMENTS，並指示寫回三項調整後凍結。本文件已納入調整；凍結的是產品範圍、五條核心 invariant 與階段邊界。技術方案仍是 Proposed，未選工具不因 plan freeze 自動獲批准。後續產品範圍變更須記錄新決策，不靜默修改 R1 的意義。
+本輪使用者對方向給予 APPROVE_WITH_MINOR_ADJUSTMENTS，並指示寫回三項調整後凍結。本文件已納入調整；凍結的是產品範圍、五條核心 invariant 與階段邊界。M1 T01 能力選型已完成；M2 AI/provider/renderer 等後續選型仍未決定，不因 plan freeze 自動獲批准。後續產品範圍變更須記錄新決策，不靜默修改 R1 的意義。
 
 ### Frozen Product Invariants
 
@@ -263,7 +263,7 @@ MVP 不需要自動公司研究、外部訊息同步、通知服務、多使用�
 
 建議採單人本機優先。原始碼/合成測試資料與真人 CV、JD 私人備註、聯絡人、薪資、面試記錄、API secrets、AI 請求/回應、輸出、備份皆分離。私人根目錄由使用者設定；本次不建立目錄，也不寫入真人資料。
 
-建議一個應用程式擁有寫入責任，使用現成持久化能力和檔案儲存；不要讓 agent 或 CLI 直接改 canonical data。是否採 SQLite 等工具仍待 OSS 比較與批准。瀏覽器本機儲存不能是唯一的未備份主資料。
+建議一個應用程式擁有寫入責任，使用現成持久化能力和檔案儲存；不要讓 agent 或 CLI 直接改 canonical data。T01 selection snapshot 已選定 SQLite + `better-sqlite3` 作為 M1 persistence boundary；當時的精確版本、安裝與 Electron compatibility 尚待 implementation gate，後續 Foundation lockfile 與 ABI gate 已通過，細節見 [OSS_REUSE.md](OSS_REUSE.md) 與 [PROGRESS.md](../PROGRESS.md)。瀏覽器本機儲存不能是唯一的未備份主資料。
 
 AI 只收到當前任務所需的 JD/經歷片段；預設排除地址、電話、聯絡資訊與無關私人筆記。第一次使用外部 AI 前顯示資料範圍與執行方，由使用者選擇；改變執行方或敏感範圍再確認。資料在本機保存不代表推論不會出機器。provider 保留/訓練政策尚未選定，Insufficient evidence。
 
@@ -332,11 +332,11 @@ CV 內容與真實文件預覽是主要視覺資產，不使用無關 stock phot
 
 ## Q. 規劃交付與下一個決策
 
-階段、完整 MVP task backlog、DAG 與 PASS 標準見 [實施計畫](superpowers/plans/2026-09-11-career-2-product-delivery.md)。現況與五張架構圖見 [CURRENT_ARCHITECTURE.md](architecture/CURRENT_ARCHITECTURE.md)。
+階段、完整 MVP task backlog、DAG 與 PASS 標準見 [實施計畫](superpowers/plans/2026-09-11-career-2-product-delivery.md)。現況與兩張 active 架構圖見 [CURRENT_ARCHITECTURE.md](architecture/CURRENT_ARCHITECTURE.md)。
 
 產品核心與 M1/M2 邊界已依本輪調整凍結，不再重新研究或 brainstorm 功能。目前交付順序為：**Plan Freeze → Career 2.0 independent Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → reviewed OpenSpec changes → M1 Foundation / Workspace vertical slice → M2 Intelligence**。
 
-R1 freeze 當時只完成規劃；後續已建立獨立 Git baseline，完成 T02、T01 M1 選型並採用 OpenSpec，進展以 [PROGRESS.md](../PROGRESS.md) 與 change artifacts 為準。Career 2.0 自行決定產品與交付；Engineering Memory 僅為 optional cross-project reference，沒有 runtime dependency。M2 的 AI/renderer 選型不應阻擋 M1 無 AI 的工作區；安裝、exact pin 與 runtime probe 仍是未執行的 implementation gate。
+本文件只定義 R1 產品語意與 M1/M2 邊界；M1 不需 AI 可用，M2 的 AI/provider/renderer 另按能力需求選型。安裝、exact pin 與 runtime probe 屬 implementation gate，不由本文件宣稱完成；Career 2.0 的 current change lifecycle 與 validation evidence 以 OpenSpec artifacts 為準。Engineering Memory 僅為 optional cross-project reference，沒有 runtime dependency。
 
 ## R1 freeze 歷史狀態（2026-09-12）
 
@@ -377,10 +377,10 @@ REMOVED_FROM_SCOPE =
 - Complex Analytics
 - Full CRM
 
-IMPLEMENTATION = NOT_STARTED
+IMPLEMENTATION_AT_R1_FREEZE = NOT_STARTED
 
-USER_APPROVAL_REQUIRED_BEFORE_BUILD = YES
+R1_USER_APPROVAL_REQUIRED_BEFORE_BUILD = YES
 
-CAPABILITY_SELECTION = PENDING（產品範圍批准不等於工具選型批准）
+CAPABILITY_SELECTION_AT_R1_FREEZE = PENDING（產品範圍批准不等於工具選型批准）
 
 當時記錄的 NEXT = PROJECT MOTHER BOOTSTRAP（Career 2.0；未執行）。此為歷史原計畫，已由上節的獨立專案交付順序取代，非現行前置條件。

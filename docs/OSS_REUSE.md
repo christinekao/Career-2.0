@@ -2,7 +2,7 @@
 
 查閱日期：2026-09-12。T01 已完成 current-source capability audit；只查官方文件、官方 repository/release 與 package registry，沒有安裝、執行或複製程式。頁面內容會變動；implementation kickoff 仍須重新確認 release、授權檔、相依套件與 runtime compatibility。
 
-2026-09-12 scope freeze 註記：沿用本次參考研究，不重新擴張產品研究。Career 2.0 independent Git baseline 與 T02 Phase 0 architecture 已完成；本文件的 T01 section 記錄 M1 capability boundary。Engineering Memory 僅為 optional cross-project reference，沒有 bootstrap/binding 或 runtime dependency。這是概念選型，不代表已安裝或已完成 implementation validation；AI/renderer 等 M2 能力仍按需另選，不能阻擋 M1。
+2026-09-12 scope freeze 註記：沿用本次參考研究，不重新擴張產品研究。Career 2.0 independent Git baseline 與 T02 Phase 0 architecture 已完成；本文件的 T01 section 記錄 M1 capability boundary。Engineering Memory 僅為 optional cross-project reference，沒有 bootstrap/binding 或 runtime dependency。這段是 T01 selection snapshot；後續 M1 Foundation 已安裝並驗證選定 runtime，read-only acceptance PASS，OpenSpec change 已封存至 `openspec/changes/archive/2026-09-16-establish-m1-foundation/`。AI/renderer 等 M2 能力仍按需另選，不能阻擋 M1。
 
 ## 1. 目前可確認的參考
 
@@ -12,7 +12,7 @@
 | [Reactive Resume](https://github.com/reactive-resume/app) | 舊 amruthpillai/reactive-resume 轉至此 repo；MIT，可自架，README 列 PDF/JSON/DOCX 輸出與 JSON Resume 匯入 | REUSE_FROM_OSS 候選：模板與輸出；也可先把它當獨立輸出工具比較 | 能否以現有公開介面接入、模板能否獨立使用、中文斷頁、引用映射保留與維護成本 |
 | [JSON Resume](https://jsonresume.org/schema) | 社群履歷資料格式，官方頁標示 MIT，涵蓋基本資料、工作、學歷等 | USE_DIRECTLY 候選：履歷交換格式。只用作輸出邊界，不當作完整 Career Evidence 主模型 | 本案 claim-level provenance 不由此格式完整承接；匯入/匯出保真需樣本驗證 |
 | [resume-cli](https://github.com/jsonresume/resume-cli) | 原 repo 說明開發移至 jsonresume/jsonresume.org 的 packages/cli；含格式驗證與輸出介面 | REUSE_FROM_OSS 候選：配合現成 theme 與標準輸出；選型須查看新維護位置 | 不可把舊 repo 歷史用法當新版本已測；中文、PDF、runtime 支援需核查 |
-| [SQLite](https://www.sqlite.org/whentouse.html) | 官方將本機應用資料儲存列為適用場景 | REUSE_FROM_OSS：T01 選定為 M1 structured persistence；driver 與 Electron ABI 風險見下方決策 | exact install/version pin、migration test、Electron compatibility 尚待 implementation kickoff |
+| [SQLite](https://www.sqlite.org/whentouse.html) | 官方將本機應用資料儲存列為適用場景 | REUSE_FROM_OSS：T01 選定為 M1 structured persistence；driver 與 Electron ABI 風險見下方決策 | T01 selection snapshot 當時尚待 exact install/version pin、migration test、Electron compatibility；後續 Foundation lockfile 與 ABI gate 已通過，現況見 PROGRESS.md |
 | [Tiptap](https://tiptap.dev/docs/editor/getting-started/overview) | 官方說明基於 ProseMirror 的可擴充 editor；開源核心 MIT，另有付費 extensions | REUSE_FROM_OSS 候選：僅在結構化文件編輯超出原生表單能力時使用 | 付費功能不可默認可用；不為版本快照而購建協作平台 |
 | [Job Tracker](https://jobtracker.shunzz.com) | 本次讀取未取得可檢視的頁面內容 | DEFER：保留為使用者指定參考 | Insufficient evidence；不聲稱有看板、版本、AI 或其他功能，未做視覺評估 |
 
@@ -20,7 +20,7 @@
 
 ## 2. 每類能力的取用策略
 
-分類含義：USE_DIRECTLY 是利用現成原生/標準能力；REUSE_FROM_OSS 是採用成熟 OSS 能力；ADAPT_CONCEPT 僅借設計概念；BUILD_DIFFERENTIATOR 是本案特有產品行為；DEFER 是本階段不需要。T01 的 capability decision 已完成；所有依賴仍未安裝，implementation validation 與 exact lockfile pin 留在下一階段。
+分類含義：USE_DIRECTLY 是利用現成原生/標準能力；REUSE_FROM_OSS 是採用成熟 OSS 能力；ADAPT_CONCEPT 僅借設計概念；BUILD_DIFFERENTIATOR 是本案特有產品行為；DEFER 是本階段不需要。T01 決策當時所有依賴尚未安裝，implementation validation 與 exact lockfile pin 留在下一階段；後續 Foundation runtime/lockfile 已建立並通過 acceptance，現況與 evidence 見 [PROGRESS.md](../PROGRESS.md) 及 archived change。
 
 | 能力 | Classification | 第一選項 | 替代與比較重點 |
 | --- | --- | --- | --- |
@@ -343,6 +343,9 @@ application owns only the product-specific domain rules and narrow interfaces:
   writer or private-data layout contract;
 - generated output and future AI capabilities remain outside canonical state.
 
-T01 result: capability selection is complete for M1. Installation, exact
-lockfile pinning, compatibility probes and product implementation remain
-separate authorized work.
+T01 result at the 2026-09-12 selection point: capability selection was
+complete for M1; installation, exact lockfile pinning, compatibility probes
+and product implementation remained separate authorized work. Subsequent
+Foundation work has installed and pinned the selected runtime and implemented
+only the foundation slice; current validation and product-domain status are
+tracked in `PROGRESS.md` and the archived OpenSpec change.

@@ -1,6 +1,6 @@
 # Workspace Boundary Map
 
-Scope：本案工作位置與外部邊界。Current：只有規劃文件。Proposed：私人資料及執行能力均未建立。
+Scope：本案工作位置與外部邊界。Current：M1 Foundation runtime 與 repo/private-root boundary 已建立並通過 acceptance；產品私人資料流程尚未建立。Proposed：產品私人資料及外部執行能力仍未建立。
 
 ```mermaid
 flowchart LR
@@ -20,4 +20,4 @@ flowchart LR
 - Boundary / read-write：只有未來應用可寫私人主資料；AI 與 OSS 不直接寫入；本輪不讀舊案資料。
 - Invariants：私人資料不進 repo；本案不繼承舊 repo；外部 AI 發送範圍需先批准。
 - Open questions：私人根目錄、是否允許外部推論、所選執行能力，Insufficient evidence。
-- Validation evidence：初始目錄為空；本輪只建立 Markdown；使用者確認單人自用。圖內 Proposed 尚無 runtime 證據。
+- Validation evidence：Foundation 使用 synthetic private root 並驗證 repo isolation；產品-domain data/workflow 尚未執行。圖內產品 Proposed 邊界不等同於 Foundation runtime 已驗收。

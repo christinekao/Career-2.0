@@ -2,17 +2,17 @@
 
 本檔是既有持久決策的檢索索引，不另立 ADR authority。決策內容與衝突處理仍由 RELATED_SOURCES 的 Career 2.0 文件負責；修改決策應先改權威來源，再刷新本索引。
 
-索引建立：2026-09-13。DATE 是來源記錄日期，不假設每一條細則都有獨立批准時間。`FINALIZED_CONTRACT` / `SELECTED_NOT_IMPLEMENTED` / `ADOPTED_WORKFLOW` 區分契約、選型與已採用的文件流程，均不表示產品驗證通過。未見來源比較的項目明列「未記錄」，不補造 alternatives。
+索引建立：2026-09-13。DATE 是來源記錄日期，不假設每一條細則都有獨立批准時間。`FINALIZED_CONTRACT` / `SELECTED_NOT_IMPLEMENTED` / `SELECTED; FOUNDATION_IMPLEMENTED; ACCEPTANCE_PENDING` / `SELECTED; FOUNDATION_IMPLEMENTED; ACCEPTED_AND_ARCHIVED` / `ADOPTED_WORKFLOW` 區分契約、選型、foundation implementation、已完成 M1 acceptance/archival 與已採用的文件流程；`ACCEPTED_AND_ARCHIVED` 僅表示對應 M1 Foundation change 的 evidence gate 已通過，不表示產品-domain 功能已完成。未見來源比較的項目明列「未記錄」，不補造 alternatives。
 
-[Dashboard](project-dashboard.html) · [Validation Summary / 來源版本](VALIDATION_SUMMARY.md)
+[Validation Summary（historical snapshot / 來源版本）](VALIDATION_SUMMARY.md)
 
 | DECISION_ID | 決策 | STATUS | 原權威 |
 | --- | --- | --- | --- |
 | [C2-D001](#c2-d001) | Local-first 私人儲存 | FINALIZED_CONTRACT | T02 |
 | [C2-D002](#c2-d002) | Private root 在 Git 外 | FINALIZED_CONTRACT | T02 / private-local-storage |
 | [C2-D003](#c2-d003) | 單一 canonical writer | FINALIZED_CONTRACT | T02 |
-| [C2-D004](#c2-d004) | SQLite + better-sqlite3 | SELECTED_NOT_IMPLEMENTED | T01 |
-| [C2-D005](#c2-d005) | Electron runtime | SELECTED_NOT_IMPLEMENTED | T01 |
+| [C2-D004](#c2-d004) | SQLite + better-sqlite3 | SELECTED; FOUNDATION_IMPLEMENTED; ACCEPTED_AND_ARCHIVED | T01 |
+| [C2-D005](#c2-d005) | Electron runtime | SELECTED; FOUNDATION_IMPLEMENTED; ACCEPTED_AND_ARCHIVED | T01 |
 | [C2-D006](#c2-d006) | Immutable Evidence revisions | FINALIZED_CONTRACT | R1 / T02 / career-evidence |
 | [C2-D007](#c2-d007) | Immutable Submitted Material snapshots | FINALIZED_CONTRACT | R1 / T02 / submitted-material-history |
 | [C2-D008](#c2-d008) | Project-local OpenSpec workflow | ADOPTED_WORKFLOW | Architecture / OpenSpec config |
@@ -51,31 +51,31 @@
 - DECISION: Career 2.0 local application 是唯一 canonical writer；T01 將責任落在 Electron main/application/domain，renderer 只透過 narrow preload/IPC 請求。
 - WHY: 讓修訂、衝突與私人資料規則由一個 application owner 執行。
 - ALTERNATIVES_CONSIDERED: T02 排除 server、scheduler、sync layer 與 multi-agent writer；未記錄完整並行架構評選。
-- CONSEQUENCES: stale edits 必須拒絕或 reload/compare。Active change 的未提交 design/spec 進一步要求每個 root 的 second-instance conflict fail closed；不宣稱能阻止任意外部工具修改使用者檔案，ownership mechanism 尚待實作。
-- RELATED_SOURCES: [CURRENT_ARCHITECTURE — T02 §8 / T01 boundary](architecture/CURRENT_ARCHITECTURE.md)；[Private Local Storage spec](../openspec/specs/private-local-storage/spec.md)；[active design — Application boundary](../openspec/changes/establish-m1-foundation/design.md)（working-tree planning，非已驗證行為）。
+- CONSEQUENCES: stale edits 必須拒絕或 reload/compare。M1 Foundation 已實作 per-root ownership、generation-bound stale-recovery claims、Darwin recovery-path validation、non-Darwin crash/takeover、stale-recovery serialization 與 READY 前 ownership recheck。依使用者 2026-09-16 threat-model decision，預先存在的 symlink/hard-link/out-of-root paths 仍必須 fail closed；同一 OS 使用者在 path validation 與 open syscall 間主動替換 `.career2` 則是 M1 non-goal、未被防護，列為 future hardening，沒有宣稱 race 已修復。H1 依此 scope 關閉；H5 的 Electron startup acceptance 與 read-only M1 acceptance review 均 PASS，change 已 sync/archive。Evidence 見 [PROGRESS.md](../PROGRESS.md) 與 archived change。
+- RELATED_SOURCES: [CURRENT_ARCHITECTURE — T02 §8 / T01 boundary](architecture/CURRENT_ARCHITECTURE.md)；[Private Local Storage spec](../openspec/specs/private-local-storage/spec.md)；[archived design — Application boundary](../openspec/changes/archive/2026-09-16-establish-m1-foundation/design.md)。
 
 ## C2-D004
 
 - DECISION_ID: C2-D004
 - DATE: 2026-09-12（T01）
-- STATUS: SELECTED_NOT_IMPLEMENTED
+- STATUS: SELECTED; FOUNDATION_IMPLEMENTED; ACCEPTED_AND_ARCHIVED
 - CONTEXT: M1 需要 transaction、relation、stable references 與 reopen 行為。
 - DECISION: SQLite + `better-sqlite3`，位於可替換 persistence boundary 後方。
 - WHY: T01 評估其 transaction 支援與成熟同步介面，接受 native-addon rebuild 成本。
 - ALTERNATIVES_CONSIDERED: `node:sqlite` 在 T01 的 Node v24 文件快照屬 release-candidate，保留重評；file-only JSON/YAML 因自製交易、migration、關聯完整性成本而拒絕。
-- CONSEQUENCES: exact package/lockfile 與 Electron ABI 需實測。Open/write/transaction/reopen probe 失敗就停下重評，不可靜默換 driver。此處不重查或宣稱套件版本為今日最新。
+- CONSEQUENCES: package/lockfile pin 與 2026-09-15 Electron ABI probe 曾通過；2026-09-16 post-hardening ABI retry 在 probe 輸出前 SIGABRT，不能據此斷定 ABI mismatch。依原 gate，若有效 probe 證明相容性失敗才停止重評；不得靜默換 driver。當前驗證狀態見 PROGRESS.md；此處不重查或宣稱套件版本為今日最新。
 - RELATED_SOURCES: [OSS_REUSE — §§5.2–5.5、5.7](OSS_REUSE.md)（commit `a9412b155c21809cc84fdfd7616c84bf9932fe27`）；[CURRENT_ARCHITECTURE — T01 boundary](architecture/CURRENT_ARCHITECTURE.md)。
 
 ## C2-D005
 
 - DECISION_ID: C2-D005
 - DATE: 2026-09-12（T01）
-- STATUS: SELECTED_NOT_IMPLEMENTED
+- STATUS: SELECTED; FOUNDATION_IMPLEMENTED; ACCEPTED_AND_ARCHIVED
 - CONTEXT: 單一 desktop application 需直接管理 private root 與本地 SQLite。
 - DECISION: Electron shell + React/Vite renderer；shell、renderer/build 與 domain semantics 分開。
 - WHY: T01 接受較大 binary，以避免新增 Rust + JavaScript 雙語 build boundary；原生 private-root 操作符合 M1 需求。
 - ALTERNATIVES_CONSIDERED: Tauri 的雙工具鏈；SwiftUI/AppKit 的 macOS lock-in；browser/PWA 的 storage permissions 與 private-root ownership 限制，見原比較。
-- CONSEQUENCES: main process 擁有寫入，renderer 不直寫 DB/filesystem；Vite dev server 只是 build/dev concern，不是產品 network dependency。版本依原 T01 selection snapshot，installation、pin 與 compatibility 未驗證。
+- CONSEQUENCES: main process 擁有寫入，renderer 不直寫 DB/filesystem；Vite dev server 只是 build/dev concern，不是產品 network dependency。Foundation shell/build 與 lockfile 已存在；hardened H5 GUI startup acceptance 與 read-only M1 acceptance review 均 PASS，OpenSpec change 已 archive；product UI 仍未開始。詳見 PROGRESS.md；版本依原 T01 selection snapshot。
 - RELATED_SOURCES: [OSS_REUSE — §§5.2–5.4、5.6–5.8](OSS_REUSE.md)；[CURRENT_ARCHITECTURE — T01 boundary](architecture/CURRENT_ARCHITECTURE.md)。
 
 ## C2-D006

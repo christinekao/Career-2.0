@@ -1,26 +1,28 @@
 # Career 2.0 Implementation Plan
 
+**Document Status:** FROZEN HISTORICAL REFERENCE. The R1/T01/T02 statements below describe the planning snapshot; current Foundation implementation, hardening, validation, and acceptance status are maintained by [PLAN.md](../../../PLAN.md), [PROGRESS.md](../../../PROGRESS.md), [CURRENT_ARCHITECTURE.md](../../architecture/CURRENT_ARCHITECTURE.md), and the archived OpenSpec change at `openspec/changes/archive/2026-09-16-establish-m1-foundation/`.
+
 **Goal:** 先建立 Career Evidence + Opportunity foundation，交付保存實際投遞版本與下一步的單人工作區，再以同一組經歷支撐四層求職策略。
 
-**Plan Status:** APPROVED / FROZEN，R1，2026-09-12。使用者 minor scope review 的三項調整已納入；Career 2.0 獨立 Git baseline 已建立；T01/T02 已完成，產品實作尚未開始。
+**Plan Status:** APPROVED / FROZEN，R1，2026-09-12。使用者 minor scope review 的三項調整已納入；Career 2.0 獨立 Git baseline 已建立；T01/T02 規劃已完成；產品-domain implementation 尚未開始。M1 Foundation implementation/hardening、validation、acceptance 與 archive 已完成；這不等同產品-domain 功能 acceptance。
 
 **Architecture:** 單一應用、六個產品責任領域；原始碼與私人資料分離。事實、生成草稿、已送快照分開；使用成熟能力處理儲存與文件輸出，客製可追溯策略與版本行為。
 
-**Tech Stack:** T01 已完成 M1 capability boundary：SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3。Exact lockfile/version recheck、安裝、runtime probe 與 implementation 仍未開始；本文不指定程式檔案、函式或 executable schema，遵守使用者 DO NOT CODE / DO NOT CREATE SCHEMAS 的限制。
+**Tech Stack:** T01 規劃快照已完成 M1 capability boundary：SQLite + `better-sqlite3`、native filesystem/hash/test APIs、`fflate` ZIP container、Electron stable v44 line、React 19.3 + Vite 8.3。Exact lockfile/version recheck、安裝與 runtime probe 當時尚未開始；後續 Foundation implementation、ABI gate 與 H5 evidence 由 archived OpenSpec change 記錄。本文不指定程式檔案、函式或 executable schema，遵守 R1 freeze 當時的 DO NOT CODE / DO NOT CREATE SCHEMAS 限制。
 
-**Change Workflow:** OpenSpec 是 Career 2.0 的 project-local change-management layer；本文件仍是 milestone/roadmap 與 task authority。`establish-m1-foundation` 已提出並完成 planning artifacts，尚未 apply。
+**Change Workflow:** OpenSpec 是 Career 2.0 的 project-local change-management layer；本文件只保留 milestone、roadmap、task、DAG 與 acceptance authority，個別 change 的 lifecycle/status 以 [OpenSpec changes](../../../openspec/changes/) 為準。
 
-**Spec:** [PRODUCT_PLAN.md](../../PRODUCT_PLAN.md)。T00 產品範圍已凍結；其餘工作未執行。完成規劃不代表任何 implementation task 完成。
+**Spec:** [PRODUCT_PLAN.md](../../PRODUCT_PLAN.md)。T00 產品範圍已凍結；R1 freeze 時其餘 roadmap 工作未執行。完成規劃不代表產品-domain implementation 或 acceptance 已完成。
 
 ## 全域約束
 
 - OSS_FIRST、REPLACEABILITY_FIRST、ONE_COORDINATOR、EVIDENCE_FIRST。
 - PRIVATE_DATA_OUTSIDE_REPOSITORY、NO_AUTONOMOUS_CUSTOM_TOOL_BUILDING。
-- 不固定 model、vendor、coding agent、AI provider、browser implementation、spec tool、agent framework。
+- M1 的 SQLite、Electron、React/Vite 及 native/fflate 能力已按 OSS_REUSE 選定；M2 model/vendor/AI provider/renderer、coding agent、browser implementation、spec tool、agent framework 仍保持可替換，未由 R1 freeze 固定。
 - 不繼承 Job-Ops 架構、命名、歷史層級與工具鏈。
 - 不建 Auto Apply、mass submission、自製 agent/model/browser/resume-layout/provider infrastructure、complex analytics、full CRM。
 - JOB_DISCOVERY = LATER；MVP = NOT A JOB SEARCH ENGINE。
-- 本文件只規劃。產品範圍已批准並凍結；具體工具另按能力需求選型。本輪不建立 repo、安裝相依或啟動實作。
+- R1 freeze 時只做規劃文件；目前已建立 Career 2.0 獨立 Git repo。安裝相依、建立 schema、寫產品程式與部署須依後續 OpenSpec change 與 implementation gate 執行。
 - OpenSpec 僅管理個別 change 的 proposal、delta specs、design、tasks、apply、verify、sync/archive；不取代 PLAN、Product Plan、Current Architecture 或本文件。
 - ONE_OPENSPEC_CHANGE = ONE_COHERENT_BEHAVIORAL_OR_ENGINEERING_CHANGE；不把整個 M1 合成一個 change，也不為每個微小檔案編輯建立 change。
 - Frozen product invariants：Career Evidence 是職涯事實權威；生成 CV/Story 不自動成真相；CV/Story 同源；送出材料是不可變歷史快照；Opportunity 是流程中心。
@@ -34,7 +36,7 @@
 | docs/OSS_REUSE.md | 原始來源、候選比較、取用方式、T01 M1 capability selection |
 | 本文件 | 階段、工作項目、依賴、驗收與 exit criteria |
 | docs/architecture/CURRENT_ARCHITECTURE.md | 實際現況與 Proposed 明確分開，統一架構圖入口 |
-| docs/architecture/diagrams/*.md | 五個邊界/責任/資料/交付視圖 |
+| docs/architecture/diagrams/ | 兩個 active derived views；runtime-data-flow-map 另作 historical reference |
 | openspec/specs/、openspec/changes/ | Current approved behavioral specs 與個別 change lifecycle；不取代上列產品、架構與 roadmap authority |
 
 批准選型後，第一個 implementation task 才依實際 framework 定義精確 module/file 路徑、介面及測試命令；不在未知技術上偽造可執行計畫。每項工作應可單獨評審，setup 與必要測試跟著該項交付。
@@ -59,7 +61,7 @@
 
 Explore 不要求用於 obvious changes；對 trivial non-product maintenance，若 OpenSpec 不增加可審查價值可不建立 change。每個 change 必須能獨立理解、實作、驗證與封存；完成的 OpenSpec change 不自動成為 Engineering Memory lesson。
 
-目前第一個 change 是 `establish-m1-foundation`：planning 已 READY，implementation 未開始。後續 M1 implementation 需先 review 此 change，再明確進入 apply。
+個別 change 先由 OpenSpec review proposal、design、spec 與 tasks，再依核准流程進入 apply；詳細 lifecycle/status 不在本文件維護。
 
 ## 完整 MVP Task Backlog
 
@@ -69,7 +71,7 @@ Explore 不要求用於 obvious changes；對 trivial non-product maintenance，
 - Goal：納入 minor scope review，凍結五條 invariant、M1 foundation 和完整 MVP 邊界。
 - Inputs：本輪文字、附件、使用者已確認單人自用。
 - Outputs：R1 frozen 產品規劃、功能分期、使用者條件批准及調整完成記錄。
-- Acceptance Criteria：Evidence 提前至 M1；送出快照含當時證據引用且不可變；Interaction 不長成 CRM；五條 invariant 明列；M1 + M2 才是完整 MVP；不固定技術。
+- Acceptance Criteria：Evidence 提前至 M1；送出快照含當時證據引用且不可變；Interaction 不長成 CRM；五條 invariant 明列；M1 + M2 才是完整 MVP；產品 scope freeze 與技術選型分開。
 - Validation Method：對照本輪三項調整、頁籤分期與本案交付順序，檢查任務依賴及驗收一致。
 - [x] 2026-09-12：依使用者 APPROVE_WITH_MINOR_ADJUSTMENTS 指示寫回調整，產品範圍凍結為 R1。
 
@@ -307,4 +309,4 @@ flowchart TD
 
 T15 完成由 coordinator 查看實際產物與驗證結果後決定。只完成 prompt、後端、測試或 subagent 回報均不足以宣稱 MVP 完成。
 
-本輪狀態：PLAN = APPROVED / FROZEN（R1）；三項 scope 調整與五條 invariant 已寫回。Career 2.0 independent Git baseline = `74e05d0bdd20e55453b64504bd04d77bb408ed86`；T01/T02 已完成。M1 capability selection 已記錄；OpenSpec `establish-m1-foundation` 已完成 planning、尚未 apply；實作、產品測試、依賴安裝、runtime probe、AI/provider/renderer 選型均未開始；Engineering Memory 未 bootstrap、未 binding。NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY。
+**Retirement rule:** 當 roadmap、milestones、sequencing 與 acceptance 已由 PLAN + OpenSpec changes 完整承接，本文件凍結為 historical reference，不再維護。

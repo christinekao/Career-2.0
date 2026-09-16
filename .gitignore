@@ -1,2 +1,6 @@
 # Operating-system metadata; keep outside repository history.
 .DS_Store
+
+# Local install and build output.
+node_modules/
+dist/

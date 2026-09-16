@@ -1,6 +1,12 @@
 # Career 2.0 Validation Summary
 
-日期：2026-09-13。這是有界 evidence index，不取代原 specs、tests、Git 或驗收來源。[Dashboard](project-dashboard.html) · [Decision Log](DECISION_LOG.md) · [Progress](../PROGRESS.md)
+> STATUS: HISTORICAL SNAPSHOT
+>
+> DO NOT UPDATE FOR CURRENT PROJECT VALIDATION.
+>
+> 本檔只保存 2026-09-13 的 Starter Kit/adoption evidence。Current change validation evidence belongs to `openspec/changes/<active-change>/` and its acceptance/verification evidence；未來 runtime/product validation 不回填本檔。
+
+日期：2026-09-13。這是有界 evidence index，不取代原 specs、tests、Git 或驗收來源。[Decision Log](DECISION_LOG.md) · [Progress](../PROGRESS.md)
 
 ```text
 IMPLEMENTED != VALIDATED
@@ -60,7 +66,7 @@ Direct tasks checkbox inspection: 0 complete / 10 total
 - PROVEN: 四項 capability 存在；138 個本地 link / anchor 檢查通過；9/9 decision records 與 4/4 validation records 欄位齊備；23 份 source hashes 一致；OpenSpec 與 Engineering Memory bytes 前後一致；沒有 Casebook / Interview Story placeholder；HTML 在兩個 viewport 無水平溢出。
 - NOT_PROVEN: application runtime、product UI、外部網站可用性、OSS 版本最新性、使用者 30 秒理解目標、完整 accessibility certification、所有既有 Markdown/Mermaid 的視覺驗收。
 - LIMITATIONS: 僅檢查本次三份新增 derived artifacts 與七份修改文件中的本地 source links；不以讀取 Git 狀態證明所有外部資料存在與否。Graph discovery 只有 Job-Ops index，沒有 Career 2.0 project/generation，故本次文件直接讀原檔；不借用舊專案 graph，不建立 index。驗證用臨時 scripts / 瀏覽器檢查不屬專案 runtime，不留 generator 或測試框架。
-- EVIDENCE: 本文件的 check ledger、wording audit、source manifest；[Decision Log](DECISION_LOG.md)、[HTML dashboard](project-dashboard.html)、[Progress](../PROGRESS.md) 與本次限定 Git diff。Engineering Memory 只讀用來取得 global Starter Kit contract，未修改。
+- EVIDENCE: 本文件的 check ledger、wording audit、source manifest；[Decision Log](DECISION_LOG.md)、本次 bounded HTML inspection result、[Progress](../PROGRESS.md) 與本次限定 Git diff。Engineering Memory 只讀用來取得 global Starter Kit contract，未修改。
 - DATE: 2026-09-13T03:27:52+08:00
 - SOURCE_REVISION: `9b76e54c0f1f8596c2442e3d48649109d138a2ea+source-set-sha256:089ba608972faaf107606da5950339a97655b8e5be163cadfd420855147509c1`；新增 derived files 由本次 Starter Kit commit 記錄，不納入自己的 source hash，避免自我引用。
 
@@ -79,7 +85,7 @@ Direct tasks checkbox inspection: 0 complete / 10 total
 | GIT_DIFF_CHECK | PASS：`git diff --check` 無輸出；parent 檢視全部 task-owned diff；獨立 reviewer 對 HTML、Decision Log 與 wording scope 無 actionable findings。 |
 | OPENSPEC_PRESERVATION | PASS：12 份 OpenSpec 檔案 SHA-256 前後一致；tasks 仍 0/10。三份既有 dirty edits 不屬本次 stage/commit allowlist。 |
 | ENGINEERING_MEMORY_PRESERVATION | PASS：134 份非 `.git` 檔案的 paths / SHA-256 與 Git status 前後一致；未寫 Engineering Memory。 |
-| CASEBOOK_BOUNDARY | PASS：`docs/cases/`、Interview Story candidate files / directories 不存在；新增檔案僅 Dashboard、Decision Log、Validation Summary。 |
+| CASEBOOK_BOUNDARY | PASS：`docs/cases/`、Interview Story candidate files / directories 不存在；adoption snapshot 當時新增的 derived/index files 不包含 Casebook 或 Interview Story placeholder。 |
 
 以上為執行結果摘要，不是永久保存的 browser trace 或完整 accessibility audit；本次新增產物的確切 bytes 由 Starter Kit commit 保存。
 
@@ -104,7 +110,7 @@ Direct tasks checkbox inspection: 0 complete / 10 total
 - RESULT: NOT_YET_TESTED。
 - PROVEN: 驗收規則已被文件化，CV / Story 同源、Opportunity workflow 與 immutable history 有權威來源。
 - NOT_PROVEN: Evidence revision 固定不變、實際送出快照不變、reopen 正確、deterministic backup/restore、keyboard/mobile/product UI、真實 JD 工作流程與市場需求。
-- LIMITATIONS: Foundation change 本身不包含這些 product features；本次 Dashboard 的視覺檢查不能當成 application UI pass。PROGRESS 記載較早的文件 link / DAG 檢查，屬歷史報告，本次不冒充重新執行該整套驗證。
+- LIMITATIONS: Foundation change 本身不包含這些 product features；本次靜態 HTML 的視覺檢查不能當成 application UI pass。PROGRESS 記載較早的文件 link / DAG 檢查，屬歷史報告，本次不冒充重新執行該整套驗證。
 - EVIDENCE: [Delivery plan / acceptance](superpowers/plans/2026-09-11-career-2-product-delivery.md)、[CURRENT_ARCHITECTURE — T02 §9](architecture/CURRENT_ARCHITECTURE.md)、[Product Plan — P](PRODUCT_PLAN.md)、[Progress](../PROGRESS.md)。
 - DATE: 2026-09-13T03:27:52+08:00
 - SOURCE_REVISION: `9b76e54c0f1f8596c2442e3d48649109d138a2ea+source-set-sha256:089ba608972faaf107606da5950339a97655b8e5be163cadfd420855147509c1`。
@@ -137,7 +143,7 @@ Direct tasks checkbox inspection: 0 complete / 10 total
 LAST_REFRESHED = 2026-09-13T03:27:52+08:00
 BASE_COMMIT = 9b76e54c0f1f8596c2442e3d48649109d138a2ea
 SOURCE_REVISION = 9b76e54c0f1f8596c2442e3d48649109d138a2ea+source-set-sha256:089ba608972faaf107606da5950339a97655b8e5be163cadfd420855147509c1
-FRESHNESS_STATUS = CURRENT
+FRESHNESS_STATUS = STALE
 DASHBOARD_IS_SOURCE_OF_TRUTH = NO
 ENGINEERING_MEMORY_SUGGESTS = TRUE
 CAREER_2_DECIDES = TRUE
@@ -146,11 +152,11 @@ ENGINEERING_MEMORY = OPTIONAL_CROSS_PROJECT_REFERENCE
 ENGINEERING_MEMORY_DEPENDENCY = NONE
 ```
 
-CURRENT 僅表示 Dashboard 已核對此具名 source set。來源包括本次 authority wording corrections、PROGRESS adoption entry，以及 task 開始前已存在的三份 uncommitted OpenSpec edits：`design.md`、`specs/application-foundation/spec.md`、`tasks.md`。這些 OpenSpec bytes 會保留在 worktree，**不進本次 commit**；因此 BASE_COMMIT 單獨不足以還原此來源狀態，這是 freshness 的明示限制。
+原始 snapshot 的 CURRENT 僅表示 2026-09-13 已核對當時具名 source set；本次 documentation reduction 已改變來源集合與導航，因此本文件現在明示為 HISTORICAL SNAPSHOT，FRESHNESS_STATUS = STALE。來源包括當時的 authority wording corrections、PROGRESS adoption entry，以及 task 開始前已存在的三份 uncommitted OpenSpec edits：`design.md`、`specs/application-foundation/spec.md`、`tasks.md`。這些 OpenSpec bytes 會保留在 worktree，**不進本次 commit**；因此 BASE_COMMIT 單獨不足以還原當時來源狀態，這是 freshness 的明示限制。
 
-Manifest 包含 PLAN、PROGRESS、既有 docs Markdown 與 OpenSpec 文件；不包含三份新增 derived views、global Skills、Engineering Memory、`.git` 或 private data。Hash 演算法：逐檔 SHA-256；將 repo-relative paths 依字典序排序，每筆串接 `path + NUL + lowercase_sha256 + LF` 的 UTF-8 bytes，對整串再做 SHA-256，形成 source-set ID。下表可直接比對檔案 bytes。
+Manifest 是 reduction 前的歷史 source set，包含當時的 PLAN、PROGRESS、docs Markdown 與 OpenSpec 文件；已移除的 presentation views 僅保留原始 hash provenance，不再提供 current navigation。它不包含當時的新增 derived views、global Skills、Engineering Memory、`.git` 或 private data。Hash 演算法：逐檔 SHA-256；將 repo-relative paths 依字典序排序，每筆串接 `path + NUL + lowercase_sha256 + LF` 的 UTF-8 bytes，對整串再做 SHA-256，形成 source-set ID。下表不可解讀為目前檔案集合。
 
-手動刷新：先讀 authority / OpenSpec / Git，重新比較 manifest 的路徑集合與 hashes；相關 source 變動則標 STALE，無法比較標 UNKNOWN。更新摘要後寫新的 LAST_REFRESHED / SOURCE_REVISION，驗證通過才標 CURRENT。Commit 只變動 derived views 不會自動使 source set 過期；未來新增 relevant source 也必須納入重新檢查。沒有 generator、watcher 或背景同步。
+本檔不再刷新。若未來需要 current validation，請在相關 OpenSpec change 的 acceptance/verification evidence 中記錄；本段僅描述此 historical snapshot 當時的人工 freshness 方法。沒有 generator、watcher 或背景同步。
 
 | Source path | SHA-256 |
 | --- | --- |
@@ -160,8 +166,8 @@ Manifest 包含 PLAN、PROGRESS、既有 docs Markdown 與 OpenSpec 文件；不
 | [docs/PRODUCT_PLAN.md](PRODUCT_PLAN.md) | `e82c3efa6dd5e6befaa28345a44853ad23e514c6c4e8d8fd87f81ab0ca3ed111` |
 | [docs/architecture/CURRENT_ARCHITECTURE.md](architecture/CURRENT_ARCHITECTURE.md) | `e420c429ac27ac5533794ce988663629db96d50b57238e0753b7bd1e820d5a9d` |
 | [docs/architecture/diagrams/authority-ownership-map.md](architecture/diagrams/authority-ownership-map.md) | `6c9377f43d4eac18352f29789ff5fbdeec6fc1e37505e306646a08bdd64cd554` |
-| [docs/architecture/diagrams/change-delivery-flow.md](architecture/diagrams/change-delivery-flow.md) | `6bc91edecccb55970bb41bd2a7843a6882923f2f51a735b84fcb79928e126d3b` |
-| [docs/architecture/diagrams/repository-responsibility-map.md](architecture/diagrams/repository-responsibility-map.md) | `e41c747f51300947de249f66d588eeced32eee6dd7f6d48ab3c0b627341c6951` |
+| `docs/architecture/diagrams/change-delivery-flow.md`（reduction 前 source-set entry；檔案現已移除） | `6bc91edecccb55970bb41bd2a7843a6882923f2f51a735b84fcb79928e126d3b` |
+| `docs/architecture/diagrams/repository-responsibility-map.md`（reduction 前 source-set entry；檔案現已移除） | `e41c747f51300947de249f66d588eeced32eee6dd7f6d48ab3c0b627341c6951` |
 | [docs/architecture/diagrams/runtime-data-flow-map.md](architecture/diagrams/runtime-data-flow-map.md) | `b5752d47e04b5fb0f837a9e8fb17dc87abc775b36100374bdff2d3df63899325` |
 | [docs/architecture/diagrams/workspace-boundary-map.md](architecture/diagrams/workspace-boundary-map.md) | `3a63e23912ad835dbc9d8edb26d13e9e3e3ec7bdfbaf8866c326591d1535fe5b` |
 | [docs/superpowers/plans/2026-09-11-career-2-product-delivery.md](superpowers/plans/2026-09-11-career-2-product-delivery.md) | `0b81c3c4f93e48c45e1275ccc90537448068f7200791bc011148c6bf796d71dd` |

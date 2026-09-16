@@ -1,5 +1,9 @@
 # Runtime and Data Flow Map
 
+> STATUS: HISTORICAL_REFERENCE
+>
+> 本檔是 2026-09-13 的 Proposed data-flow snapshot。不要把它當成 current runtime 或 architecture authority；目前架構契約以 [CURRENT_ARCHITECTURE.md](../CURRENT_ARCHITECTURE.md) 為準，current behavior/validation 以 OpenSpec change artifacts 為準。未來 runtime 產生的 evidence 不回填本檔。
+
 Scope：從 M1 foundation 到 M2 intelligence 的資料流。Current：沒有 runtime；產品規則已凍結，所有執行節點尚未實作。
 
 ```mermaid

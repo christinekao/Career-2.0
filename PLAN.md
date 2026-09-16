@@ -6,11 +6,17 @@ PRODUCT_DIRECTION = APPROVE_WITH_MINOR_ADJUSTMENTS（三項調整已寫回）
 
 PLAN = APPROVED / FROZEN
 
-IMPLEMENTATION = NOT_STARTED
+IMPLEMENTATION = M1_FOUNDATION_HARDENING_COMPLETE_WITHIN_APPROVED_THREAT_MODEL
 
-NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY（establish-m1-foundation）
+VALIDATION = PASS FOR M1 FOUNDATION HARDENING（Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL；Darwin recovery-path 與 non-Darwin stale-claim crash/takeover regressions PASS；same-user path-swap 是明確的 M1 threat-model non-goal / future hardening；build、OpenSpec strict 與 fresh Electron H5 startup acceptance PASS；包含 automated evidence 與 human-observed visible window）
 
-專案導覽：[Project Dashboard](docs/project-dashboard.html)（衍生視圖；不取代下列權威文件）。
+ACCEPTANCE_REVIEW = PASS
+
+M1_STATUS = ACCEPTED_AND_ARCHIVED
+
+NEXT = M1_PRODUCT_VERTICAL_SLICES
+
+本檔為專案入口；下表列出產品、交付、技術與架構的權威來源。衍生導覽：[Project Dashboard](docs/project-dashboard.html)（只提供 navigation、status 與 source links，不取代 canonical authority）。
 
 **產品核心：每個職缺都有一份可持續更新的求職檔案，幫你決定怎麼投、怎麼講、接下來做什麼。**
 
@@ -19,7 +25,7 @@ NEXT = REVIEW_FIRST_OPENSPEC_CHANGE_BEFORE_APPLY（establish-m1-foundation）
 | 1 | [產品規劃](docs/PRODUCT_PLAN.md) | 定位、使用旅程、亮點、完整功能清單、資料規則、UX、MVP |
 | 2 | [階段與任務](docs/superpowers/plans/2026-09-11-career-2-product-delivery.md) | 16 個核心任務、8 個後續任務、依賴圖、20 項驗收條件 |
 | 3 | [OSS 候選比較](docs/OSS_REUSE.md) | 可重用能力、原始來源、三條路線、選型批准方式 |
-| 4 | [架構現況與五張圖](docs/architecture/CURRENT_ARCHITECTURE.md) | 已觀察現況、Proposed 邊界、資料流、權責與交付 |
+| 4 | [架構現況與兩張 active 圖](docs/architecture/CURRENT_ARCHITECTURE.md) | 已觀察現況、Proposed 邊界、保留的空間邊界與權責 |
 
 ## R1 Scope Review
 
@@ -39,12 +45,12 @@ M1 Opportunity 頁籤：Overview、Interactions、Application、Documents。Care
 4. Submitted application materials are immutable historical snapshots.
 5. Opportunity is the center of the user workflow.
 
-詳細語意及未知歷史材料處理以 [產品規劃第 0、L 節](docs/PRODUCT_PLAN.md) 為準。凍結產品核心與階段邊界，不固定 framework、database、model；後續產品範圍變更要記錄新決策。
+詳細語意及未知歷史材料處理以 [產品規劃第 0、L 節](docs/PRODUCT_PLAN.md) 為準。凍結產品核心與階段邊界；M1 T01 能力選型已完成，M2 AI/provider/renderer 等後續能力仍不在本次產品 freeze 內；後續產品範圍變更要記錄新決策。
 
 交付節奏：M1 Foundation（Career Evidence + Opportunity）→ M1 Workspace → M2 Intelligence，兩階段合計才是完整 MVP；M3 及 Later 維持既定範圍。
 
-已完成：產品及實施規劃、獨立 Git baseline、T02 架構契約、T01 M1 能力選型、第一個 OpenSpec change 的 planning artifacts。未開始：產品程式、相依安裝、schema、runtime probe、部署；M2 model/provider 選型仍延後。
+已完成：產品及實施規劃、獨立 Git baseline、T02 架構契約、T01 M1 能力選型，以及依核准 threat model 完成的 M1 Foundation hardening。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover tests 通過；same-user path-swap 仍未防護，明列為 M1 non-goal/future hardening，並保留為 skipped fixture，不宣稱已修復。Foundation suite 為 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已有 automated app-layer evidence 與使用者實際觀察到的 visible window：fresh PID 79150 載入 Career 2.0 main entry、renderer、preload/IPC，synthetic private root 的 store READY version 1，完成 8 秒可見觀察並以 code 0 / signal null 結束。Read-only M1 acceptance review 已 PASS；`establish-m1-foundation` 已 sync 並 archive 至 `openspec/changes/archive/2026-09-16-establish-m1-foundation`。詳細狀態見 [PROGRESS.md](PROGRESS.md)。M1 product-domain features/schema 與部署仍未開始；M2 model/provider 選型仍延後。
 
-目前交付順序：Plan Freeze → Career 2.0 independent Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → reviewed OpenSpec changes → M1 vertical slice。
+目前交付順序：Plan Freeze → Career 2.0 independent Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → M1 Foundation implementation/hardening → real Electron startup acceptance → read-only M1 review → OpenSpec sync/archive → commit → M1 product vertical slices。
 
 2026-09-12 R1 freeze 當時只完成規劃；後續 Git、T02、T01 與 OpenSpec 進展見 [PROGRESS.md](PROGRESS.md)。Career 2.0 自行擁有產品、架構與交付權威；Engineering Memory 僅為 optional cross-project reference，不是 bootstrap 前置條件，沒有 runtime dependency。

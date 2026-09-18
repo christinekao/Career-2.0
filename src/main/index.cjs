@@ -1,8 +1,31 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('node:path');
-const { bootstrapFoundation, runtimeConfigPath } = require('./foundation.cjs');
+const {
+  bootstrapFoundation,
+  runtimeConfigPath,
+  toPublicError,
+  toPublicFoundationStatus,
+} = require('./foundation.cjs');
 
 let foundationSession;
+
+function publicIpcFailure(error, fallbackCode) {
+  return { __career2PublicError: toPublicError(error, fallbackCode) };
+}
+
+function invokeDomain(namespace, operation, args) {
+  const handler = foundationSession?.[namespace]?.[operation];
+  if (typeof handler !== 'function') {
+    const error = new Error('Career 2.0 domain substrate is not ready.');
+    error.code = 'DOMAIN_NOT_READY';
+    return publicIpcFailure(error, 'DOMAIN_OPERATION_FAILED');
+  }
+  try {
+    return handler(...args);
+  } catch (error) {
+    return publicIpcFailure(error, 'DOMAIN_OPERATION_FAILED');
+  }
+}
 
 function createWindow() {
   const window = new BrowserWindow({
@@ -18,7 +41,26 @@ function createWindow() {
   return window.loadFile(path.join(__dirname, '..', '..', 'dist', 'index.html'));
 }
 
-ipcMain.handle('foundation:get-status', () => foundationSession?.status || { phase: 'starting' });
+ipcMain.handle('foundation:get-status', () => toPublicFoundationStatus(
+  foundationSession?.status || { phase: 'starting' },
+));
+
+ipcMain.handle('opportunity:create', (_event, input) => invokeDomain('opportunity', 'create', [input]));
+ipcMain.handle('opportunity:get', (_event, opportunityId) => invokeDomain('opportunity', 'get', [opportunityId]));
+ipcMain.handle('opportunity:add-jd-revision', (_event, opportunityId, input) => (
+  invokeDomain('opportunity', 'addJdRevision', [opportunityId, input])
+));
+ipcMain.handle('opportunity:get-jd-revision', (_event, opportunityId, jdRevisionId) => (
+  invokeDomain('opportunity', 'getJdRevision', [opportunityId, jdRevisionId])
+));
+ipcMain.handle('evidence:create', (_event, input) => invokeDomain('evidence', 'create', [input]));
+ipcMain.handle('evidence:get', (_event, evidenceId) => invokeDomain('evidence', 'get', [evidenceId]));
+ipcMain.handle('evidence:create-revision', (_event, evidenceId, input) => (
+  invokeDomain('evidence', 'createRevision', [evidenceId, input])
+));
+ipcMain.handle('evidence:confirm-revision', (_event, evidenceId, evidenceRevisionId, confirmedAt) => (
+  invokeDomain('evidence', 'confirmRevision', [evidenceId, evidenceRevisionId, confirmedAt])
+));
 
 app.whenReady().then(async () => {
   foundationSession = bootstrapFoundation({

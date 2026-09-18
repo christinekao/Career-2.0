@@ -10,9 +10,90 @@ const {
   writeRuntimeConfig,
 } = require('./runtime-config.cjs');
 const { acquireRootOwnership } = require('./ownership.cjs');
-const { initializeFoundationStore } = require('./persistence.cjs');
+const { initializeOpportunityEvidenceStore } = require('./persistence.cjs');
 
-function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_REPOSITORY_ROOT } = {}) {
+const PUBLIC_ERROR_MESSAGES = Object.freeze({
+  PRIVATE_ROOT_NOT_CONFIGURED: 'Configure a private root to initialize foundation state.',
+  PRIVATE_ROOT_NOT_ABSOLUTE: 'The private root must be an absolute path.',
+  PRIVATE_ROOT_REPOSITORY_LOCAL: 'The private root cannot be inside the repository.',
+  PRIVATE_ROOT_UNAVAILABLE: 'The private root is unavailable.',
+  PRIVATE_ROOT_NOT_DIRECTORY: 'The private root must be a directory.',
+  PRIVATE_ROOT_UNREADABLE: 'The private root must be readable and writable.',
+  PRIVATE_ROOT_CHANGED: 'The private root changed during the operation.',
+  PRIVATE_STATE_PATH_INVALID: 'The foundation state path is invalid.',
+  PRIVATE_STATE_PATH_UNSAFE: 'The foundation state path is unsafe.',
+  RUNTIME_CONFIG_INVALID: 'The runtime configuration is invalid.',
+  OWNERSHIP_REQUIRED: 'Foundation ownership is unavailable.',
+  OWNERSHIP_CONFLICT: 'Another process owns the private root.',
+  OWNERSHIP_RECOVERY_IN_PROGRESS: 'Private-root recovery is in progress.',
+  OWNERSHIP_UNCERTAIN: 'Foundation ownership could not be verified.',
+  OWNERSHIP_LOST: 'Foundation ownership was lost.',
+  OWNERSHIP_RELEASED: 'Foundation ownership is no longer active.',
+  FOUNDATION_INIT_FAILED: 'Foundation initialization failed.',
+  FOUNDATION_METADATA_INCOMPLETE: 'Foundation metadata is incomplete.',
+  FOUNDATION_METADATA_INVALID: 'Foundation metadata is invalid.',
+  FOUNDATION_NOT_READY: 'Foundation is not ready.',
+  FOUNDATION_ROOT_BINDING_MISMATCH: 'The foundation store belongs to a different private root.',
+  FOUNDATION_VERSION_UNSUPPORTED: 'The foundation store version is unsupported.',
+  FOUNDATION_CLOSED: 'The foundation store is closed.',
+  OPPORTUNITY_EVIDENCE_MIGRATION_FAILED: 'Opportunity/Evidence substrate migration failed.',
+  OPPORTUNITY_EVIDENCE_SCHEMA_INVALID: 'The Opportunity/Evidence schema is invalid.',
+  OPPORTUNITY_EVIDENCE_VERSION_UNSUPPORTED: 'The Opportunity/Evidence schema version is unsupported.',
+  OPPORTUNITY_EVIDENCE_NOT_READY: 'The Opportunity/Evidence substrate is unavailable.',
+  OPPORTUNITY_EVIDENCE_INVALID: 'The Opportunity/Evidence input is invalid.',
+  OPPORTUNITY_NOT_FOUND: 'The Opportunity was not found.',
+  OPPORTUNITY_INVALID: 'The Opportunity input is invalid.',
+  JD_REVISION_INVALID: 'The JD revision input is invalid.',
+  EVIDENCE_INVALID: 'The Evidence input is invalid.',
+  EVIDENCE_CORRUPT: 'The Evidence data is corrupt.',
+  EVIDENCE_NOT_FOUND: 'The Evidence was not found.',
+  EVIDENCE_REVISION_NOT_FOUND: 'The Evidence revision was not found.',
+  DOMAIN_NOT_READY: 'The Opportunity/Evidence substrate is not ready.',
+  DOMAIN_OPERATION_FAILED: 'The domain operation failed.',
+});
+
+function toPublicError(error, fallbackCode = 'FOUNDATION_INIT_FAILED') {
+  const candidateCode = typeof error?.code === 'string' ? error.code : '';
+  const code = Object.prototype.hasOwnProperty.call(PUBLIC_ERROR_MESSAGES, candidateCode)
+    ? candidateCode
+    : fallbackCode;
+  return {
+    code,
+    message: PUBLIC_ERROR_MESSAGES[code] || PUBLIC_ERROR_MESSAGES.FOUNDATION_INIT_FAILED,
+  };
+}
+
+function toPublicFoundationStatus(status) {
+  if (!status || typeof status !== 'object') return { phase: 'starting' };
+
+  const publicStatus = {};
+  for (const field of [
+    'phase',
+    'foundationPhase',
+    'opportunityEvidencePhase',
+    'storeIdentity',
+    'storeVersion',
+    'opportunityEvidenceSchemaVersion',
+  ]) {
+    if (status[field] !== undefined) publicStatus[field] = status[field];
+  }
+
+  if (status.code !== undefined || status.message !== undefined) {
+    Object.assign(publicStatus, toPublicError(status));
+  }
+
+  if (status.opportunityEvidenceStatus && typeof status.opportunityEvidenceStatus === 'object') {
+    const substrateStatus = status.opportunityEvidenceStatus;
+    publicStatus.opportunityEvidenceStatus = {
+      phase: substrateStatus.phase || 'unavailable',
+      ...toPublicError(substrateStatus, 'OPPORTUNITY_EVIDENCE_NOT_READY'),
+    };
+  }
+
+  return publicStatus;
+}
+
+function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_REPOSITORY_ROOT, persistenceOptions = {} } = {}) {
   let store;
   let ownership;
 
@@ -21,11 +102,11 @@ function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_R
     const selectedRoot = configuredRoot({ argv, env, config });
     if (!selectedRoot) {
       return {
-        status: {
+        status: toPublicFoundationStatus({
           phase: 'private-root-required',
           code: 'PRIVATE_ROOT_NOT_CONFIGURED',
           message: 'Configure a private root to initialize foundation state.',
-        },
+        }),
         close() {},
       };
     }
@@ -33,14 +114,25 @@ function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_R
     const privateRoot = validatePrivateRoot(selectedRoot, { repositoryRoot });
     writeRuntimeConfig(configPath, privateRoot.canonicalPath);
     ownership = acquireRootOwnership(privateRoot, { repositoryRoot });
-    store = initializeFoundationStore(privateRoot, { repositoryRoot, ownership });
+    store = initializeOpportunityEvidenceStore(privateRoot, {
+      ...persistenceOptions,
+      repositoryRoot,
+      ownership,
+      allowDegradedOnMigrationFailure: true,
+    });
+    const substrateAvailable = Boolean(store.opportunity && store.evidence);
 
     return {
-      status: {
+      status: toPublicFoundationStatus({
         phase: 'ready',
+        foundationPhase: 'ready',
+        opportunityEvidencePhase: substrateAvailable ? 'ready' : 'unavailable',
         storeIdentity: store.metadata.storeIdentity,
         storeVersion: store.metadata.storeVersion,
-      },
+        opportunityEvidenceSchemaVersion: substrateAvailable ? store.metadata.opportunityEvidenceSchemaVersion : null,
+        ...(store.substrateStatus ? { opportunityEvidenceStatus: store.substrateStatus } : {}),
+      }),
+      ...(substrateAvailable ? { opportunity: store.opportunity, evidence: store.evidence } : {}),
       close() {
         try {
           store?.close();
@@ -56,11 +148,10 @@ function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_R
       ownership?.release();
     }
     return {
-      status: {
+      status: toPublicFoundationStatus({
         phase: 'error',
-        code: error.code || 'FOUNDATION_INIT_FAILED',
-        message: error.message,
-      },
+        ...toPublicError(error),
+      }),
       close() {},
     };
   }
@@ -73,4 +164,6 @@ function runtimeConfigPath(userDataPath) {
 module.exports = {
   bootstrapFoundation,
   runtimeConfigPath,
+  toPublicError,
+  toPublicFoundationStatus,
 };

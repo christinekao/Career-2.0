@@ -1,6 +1,6 @@
 # Career 2.0 產品規劃
 
-建立日期：2026-09-11；凍結日期：2026-09-12。PLAN = APPROVED / FROZEN，基線 R1。M1 Foundation hardening implementation 已依核准 threat model 完成並通過 read-only acceptance review；`establish-m1-foundation` 已完成 OpenSpec sync/archive。Active same-user path-swap 是明確 non-goal / future hardening，不宣稱已修復。H5 GUI startup validation PASS。Product-domain implementation = NOT_STARTED；目前狀態見 [PROGRESS.md](../PROGRESS.md)。
+建立日期：2026-09-11；凍結日期：2026-09-12。PLAN = APPROVED / FROZEN，基線 R1。M1 Foundation hardening implementation 已依核准 threat model 完成並通過 read-only acceptance review；`establish-m1-foundation` 已完成 OpenSpec sync/archive。Active same-user path-swap 是明確 non-goal / future hardening，不宣稱已修復。H5 GUI startup validation PASS。`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Career Evidence/revision implementation、validation 與獨立 read-only acceptance 已完成，並 archive 至 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`；完整 M1 Workspace/product-domain implementation 仍未完成或 accepted；目前 M2 planning repair 尚待完成，狀態見 [PROGRESS.md](../PROGRESS.md)。
 
 ## 0. 決策與範圍
 
@@ -11,7 +11,7 @@
 | 需求來源 | 原四層規劃、LATEST PRODUCT DECISIONS、附件完整需求，以及 2026-09-12 minor scope review |
 | 優先順序衝突 | 附件原本先做 AI 核心、之後追蹤；依本輪較新的三階段指示，改為先交付投遞版本與進度，再完成四層策略 |
 | MVP 定義 | M1 是可先使用的基礎版；M1 + M2 才是完整差異化 MVP，不能以 tracker 完成宣稱整個 MVP 完成 |
-| Foundation | Career Evidence 與 Opportunity 同屬 M1 foundation；Evidence 可建立、編輯、確認與保存版本，不等待 M2 AI |
+| Foundation | Career Evidence 與 Opportunity 同屬 M1 foundation；最小 Opportunity/JD 與 Evidence/revision substrate 已 implementation-complete、accepted、archived；完整 Workspace 仍不在本 change |
 | 送出快照 | content snapshot、submitted_at、opportunity、source 與當時 evidence references 一起封存，不隨 Working CV 或 Evidence 新版變動 |
 | M1 Interaction | who、when、channel、summary、recruiter feedback、important facts、concern、next step、follow-up；不擴為 CRM |
 | 第一版客群 | 單人、自用、已有真實經歷、正在針對數個職缺準備投遞或面試 |
@@ -168,7 +168,7 @@ P0 = 完整 MVP 必要；P1 = 下一階段；P2 = 延後。MVP/M1 是投遞基�
 
 ### M1 Foundation：Career Evidence + Opportunity
 
-T07 與 T03 共同建立最小 foundation：可手動建立/編輯/確認的 Career Evidence、固定事實版本，以及可保存 JD 與來源的 Opportunity。T04 的送出快照和 T06 的 M1 驗收都依賴 T07。此層不依賴 AI、Match、Positioning 或 Story 生成。
+T07 與 T03 共同建立最小 foundation：可手動建立/編輯/確認的 Career Evidence、固定事實版本，以及可保存 JD 與來源的 Opportunity。命名的 `m1-opportunity-evidence-substrate` 已落實目前 intelligence slice 所需的最小 records/operations、revision 與 narrow boundary；validation 與獨立 read-only acceptance 已通過，change 已 archive。T04 的送出快照和 T06 的 M1 驗收仍依賴更完整的 Workspace work。此層不依賴 AI、Match、Positioning 或 Story 生成。
 
 ### M1 Workspace：可先使用的投遞管理
 

@@ -1,30 +1,10 @@
 const assert = require('node:assert/strict');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
-const Module = require('node:module');
 const os = require('node:os');
 const path = require('node:path');
 const electron = require('electron');
 const { app } = electron;
-
-const observedWebPreferences = [];
-const nativeBrowserWindow = electron.BrowserWindow;
-const observedBrowserWindow = new Proxy(nativeBrowserWindow, {
-  construct(target, args) {
-    observedWebPreferences.push({ ...(args[0]?.webPreferences || {}) });
-    return Reflect.construct(target, args, target);
-  },
-});
-const observedElectron = new Proxy(electron, {
-  get(target, property, receiver) {
-    if (property === 'BrowserWindow') return observedBrowserWindow;
-    return Reflect.get(target, property, receiver);
-  },
-});
-const originalModuleLoad = Module._load;
-Module._load = function load(request, parent, isMain) {
-  if (request === 'electron') return observedElectron;
-  return originalModuleLoad.apply(this, arguments);
-};
 
 const {
   foundationDatabasePath,
@@ -35,6 +15,9 @@ const Database = require('better-sqlite3');
 
 const repositoryRoot = path.resolve(__dirname, '..');
 const expectedPreloadPath = path.join(repositoryRoot, 'src', 'preload', 'index.cjs');
+const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'main', 'index.cjs'), 'utf8');
+const preloadSource = fs.readFileSync(expectedPreloadPath, 'utf8');
+const expectedPreloadSourceHash = crypto.createHash('sha256').update(preloadSource, 'utf8').digest('hex');
 const visibleObservationWindowMs = 8000;
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'career-2-electron-startup-'));
 const privateRootPath = path.join(temporaryRoot, 'private-root');
@@ -111,14 +94,56 @@ app.on('browser-window-created', (_event, window) => {
     try {
       const renderer = await window.webContents.executeJavaScript(`(async () => {
         const capability = window.careerFoundation;
+        const opportunity = capability
+          ? await capability.opportunity.create({
+            companyName: 'Synthetic Systems',
+            roleTitle: 'Platform Engineer',
+            sourceRef: 'https://example.test/opportunity/synthetic',
+            createdAt: '2026-09-17T03:00:00.000Z',
+          })
+          : null;
+        const jdRevision = opportunity
+          ? await capability.opportunity.addJdRevision(opportunity.opportunityId, {
+            content: 'Build reliable local systems for synthetic users.',
+            sourceRef: 'paste://synthetic-jd',
+            capturedAt: '2026-09-17T03:01:00.000Z',
+          })
+          : null;
+        const evidence = capability
+          ? await capability.evidence.create({
+            factualContent: 'Reduced synthetic queue latency.',
+            responsibilityBoundary: 'Owned the synthetic queue consumer and rollout.',
+            outcome: 'Synthetic latency decreased.',
+            provenance: { kind: 'user_note', reference: 'synthetic-evidence' },
+            createdAt: '2026-09-17T03:02:00.000Z',
+          })
+          : null;
+        const confirmedEvidence = evidence
+          ? await capability.evidence.confirmRevision(
+            evidence.evidenceId,
+            evidence.revisions[0].evidenceRevisionId,
+            '2026-09-17T03:03:00.000Z',
+          )
+          : null;
+        const readBack = opportunity && evidence
+          ? {
+            opportunity: await capability.opportunity.get(opportunity.opportunityId),
+            evidence: await capability.evidence.get(evidence.evidenceId),
+          }
+          : null;
         return {
           url: location.href,
           status: capability ? await capability.getStatus() : null,
-          capabilityKeys: capability ? Object.keys(capability) : [],
+          capabilityKeys: capability ? Object.keys(capability).sort() : [],
           requireType: typeof window.require,
           processType: typeof window.process,
           fsType: typeof window.fs,
           databaseType: typeof window.database,
+          opportunity,
+          jdRevision,
+          evidence,
+          confirmedEvidence,
+          readBack,
           rootText: document.querySelector('#root')?.textContent || '',
           assetUrls: Array.from(document.querySelectorAll('script[src],link[href]'))
             .map((element) => element.src || element.href),
@@ -128,21 +153,41 @@ app.on('browser-window-created', (_event, window) => {
       assert.equal(renderer.url.startsWith('file://'), true);
       assert.equal(renderer.status?.phase, 'ready');
       assert.equal(renderer.status?.storeVersion, 1);
-      assert.deepEqual(renderer.capabilityKeys, ['getStatus']);
+      assert.equal(renderer.status?.opportunityEvidenceSchemaVersion, 1);
+      assert.deepEqual(renderer.capabilityKeys, ['evidence', 'getStatus', 'opportunity']);
       assert.equal(renderer.requireType, 'undefined');
       assert.equal(renderer.processType, 'undefined');
       assert.equal(renderer.fsType, 'undefined');
       assert.equal(renderer.databaseType, 'undefined');
+      assert.equal(renderer.opportunity.companyName, 'Synthetic Systems');
+      assert.equal(renderer.jdRevision.availabilityStatus, 'AVAILABLE');
+      assert.equal(renderer.jdRevision.revisionNumber, 1);
+      assert.equal(renderer.readBack.opportunity.currentJdRevisionId, renderer.jdRevision.jdRevisionId);
+      assert.equal(renderer.evidence.currentRevisionId, null);
+      assert.equal(renderer.evidence.revisions[0].confirmationState, 'DRAFT');
+      assert.equal(renderer.confirmedEvidence.currentRevision.confirmationState, 'CONFIRMED');
+      assert.notEqual(renderer.confirmedEvidence.currentRevisionId, renderer.evidence.revisions[0].evidenceRevisionId);
+      assert.equal(renderer.readBack.opportunity.currentJdRevisionId, renderer.jdRevision.jdRevisionId);
+      assert.equal(renderer.readBack.evidence.currentRevisionId, renderer.confirmedEvidence.currentRevisionId);
+      assert.deepEqual(renderer.readBack.evidence.currentRevision.provenance, {
+        kind: 'user_note',
+        reference: 'synthetic-evidence',
+      });
       assert.match(renderer.rootText, /Local foundation/);
       assert.ok(renderer.assetUrls.length > 0);
       assert.ok(renderer.assetUrls.every((assetUrl) => new URL(assetUrl).protocol === 'file:'));
       assert.deepEqual(remoteRequests, []);
 
-      assert.equal(observedWebPreferences.length, 1);
-      const preferences = observedWebPreferences[0];
-      assert.equal(preferences.contextIsolation, true);
-      assert.equal(preferences.nodeIntegration, false);
-      assert.equal(fs.realpathSync.native(preferences.preload), expectedPreloadPath);
+      assert.equal(fs.realpathSync.native(expectedPreloadPath), expectedPreloadPath);
+      assert.match(
+        mainSource,
+        /preload:\s*path\.join\(__dirname,\s*'\.\.',\s*'preload',\s*'index\.cjs'\)/,
+      );
+      assert.match(mainSource, /contextIsolation:\s*true/);
+      assert.match(mainSource, /nodeIntegration:\s*false/);
+      assert.match(preloadSource, /contextBridge\.exposeInMainWorld\('careerFoundation'/);
+      assert.match(preloadSource, /ipcRenderer\.invoke\('evidence:confirm-revision'/);
+      console.log(`Career 2.0 preload identity passed: ${JSON.stringify({ path: expectedPreloadPath, sourceSha256: expectedPreloadSourceHash, ipcHandshake: true })}`);
       assert.deepEqual(JSON.parse(fs.readFileSync(configPath, 'utf8')), { privateRoot: privateRoot.canonicalPath });
 
       const databasePath = foundationDatabasePath(privateRoot);
@@ -153,6 +198,11 @@ app.on('browser-window-created', (_event, window) => {
       assert.equal(metadata.get('store_version'), '1');
       assert.equal(metadata.get('initialization_state'), 'READY');
       assert.equal(metadata.get('store_identity'), renderer.status.storeIdentity);
+      assert.equal(metadata.get('opportunity_evidence_schema_version'), '1');
+      assert.deepEqual(
+        database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").pluck().all(),
+        ['evidence_records', 'evidence_revisions', 'foundation_metadata', 'jd_revisions', 'opportunities'],
+      );
       database.close();
       assert.equal(fs.existsSync(repositoryStatePath), repositoryStateExisted);
 
@@ -198,8 +248,4 @@ app.on('will-quit', () => {
 
 process.on('exit', cleanup);
 
-try {
-  require(path.join(repositoryRoot, 'src', 'main', 'index.cjs'));
-} finally {
-  Module._load = originalModuleLoad;
-}
+require(path.join(repositoryRoot, 'src', 'main', 'index.cjs'));

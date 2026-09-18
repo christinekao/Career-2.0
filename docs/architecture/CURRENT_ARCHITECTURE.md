@@ -1,29 +1,39 @@
 # 架構現況與提案邊界
 
-現況更新：2026-09-16。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`）；M1 Foundation hardening implementation 依核准 threat model 完成。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過；active same-user .career2 replacement at lock-open 未防護，依使用者決策列為 M1 non-goal/future hardening，fixture skipped，不宣稱 race 已修復。Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已通過：fresh PID 79150 載入實際 Career 2.0 main entry、建立並顯示 BrowserWindow、renderer/preload/IPC 正常、synthetic private root 的 store READY version 1 與 identity/root binding 正常；完成 8 秒 visible observation，使用者實際看到視窗，並以 code 0 / signal null clean exit。Build、OpenSpec strict 通過。Read-only M1 acceptance review PASS；`establish-m1-foundation` 已 sync/archive。M1 product-domain features 尚未實作或 accepted。
+現況更新：2026-09-18。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`），M1 close-out commit `911a10392a1d2073145c7859feb001d0dd38fe2c` 已推送至 `origin/main`；M1 Foundation hardening implementation 依核准 threat model 完成。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過；active same-user .career2 replacement at lock-open 未防護，依使用者決策列為 M1 non-goal/future hardening，fixture skipped，不宣稱 race 已修復。Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已通過：fresh PID 79150 載入實際 Career 2.0 main entry、建立並顯示 BrowserWindow、renderer/preload/IPC 正常、synthetic private root 的 store READY version 1 與 identity/root binding 正常；完成 8 秒 visible observation，使用者實際看到視窗，並以 code 0 / signal null clean exit。Build、OpenSpec strict 通過。Read-only M1 acceptance review PASS；`establish-m1-foundation` 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Career Evidence/revision runtime、additive migration、migration ownership checkpoints、degraded foundation fallback、true cross-process restart/read-back、domain schema readiness validation、public error-boundary sanitization、main writer 與 narrow IPC/preload 已實作，36 PASS / 1 SKIPPED / 0 FAIL 的 domain validation 與獨立 read-only acceptance 通過，已 archive 至 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`；完整 M1 product-domain features 仍未實作或 accepted。`m2-intelligence-vertical-slice` 目前為 active planning，planning repair 尚待完成，尚未開始 implementation。
 
 ## 已觀察現況
 
 | 項目 | Evidence / Status |
 | --- | --- |
 | 本案工作位置 | /Users/kao_oak/Desktop/Kao_oaK/Career 2.0，由當前工作環境指定 |
-| 初始目錄 | 2026-09-11 初次盤點為空；目前有規劃、OpenSpec change、Electron/React/Vite Foundation source、tests 與本地 `.git` baseline；沒有 M1 product-domain features |
+| 初始目錄 | 2026-09-11 初次盤點為空；目前有規劃、兩個 active OpenSpec changes、Electron/React/Vite source、tests 與本地 `.git` baseline；已有最小 Opportunity/JD 與 Career Evidence/revision substrate，但沒有完整 M1 product-domain features |
 | 最接近的適用文件 | 使用者貼入的 AGENTS 規則與 /Users/kao_oak/AGENTS.md；較近的父目錄沒有 AGENTS.md |
 | 圖索引 | 本輪 list_projects 只列舊 Job-Ops 的另一工作區；沒有本案 index，generation = Insufficient evidence |
 | 本案程式發現 | M1 Foundation source 與 tests 已存在；code graph 未建立，本案圖譜 generation = Insufficient evidence |
 | 現有 runtime / local data | 本案目錄內不存在；外部是否已有相關資料為 Insufficient evidence，沒有廣泛掃描私人目錄 |
-| 外部 repo / remote / release | 獨立 local Git repo 已建立；沒有 remote、release 或 worktree；Engineering Memory 不屬本案依賴 |
-| 本輪狀態 | Foundation hardening 已依核准 threat model 完成並通過 read-only M1 acceptance review；static path confinement、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過。Active same-user path swap 是未防護的 future-hardening non-goal。H5 fresh Electron GUI acceptance 已完成並具 automated + human-observed evidence；OpenSpec change 已 sync/archive。無產品-domain schema、Evidence/Opportunity workflow 或其他產品功能 |
+| 外部 repo / remote / release | 獨立 local Git repo 已建立；`origin` = `https://github.com/christinekao/Career-2.0.git`，`main` tracks `origin/main`；尚無 release 或 worktree；Engineering Memory 不屬本案依賴 |
+| 本輪狀態 | Foundation hardening 已依核准 threat model 完成並通過 read-only M1 acceptance review；static path confinement、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過。Active same-user path swap 是未防護的 future-hardening non-goal。H5 fresh Electron GUI acceptance 已完成並具 automated + human-observed evidence；OpenSpec M1 changes 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 runtime、validation 與獨立 acceptance 已完成並 archive；`m2-intelligence-vertical-slice` 仍為 planning repair，implementation blocked。完整 product-domain runtime schema/workflow 尚未被宣稱完成 |
 
 ## 決策權與文件權威
 
 最新使用者 scope review 為 R1 凍結依據：Career Evidence + Opportunity 同為 M1 foundation；其上是 M1 Workspace，再 M2 Intelligence；完整 MVP = M1 + M2。五條 frozen invariant 見 [產品規劃](../PRODUCT_PLAN.md)。附件是需求來源，OSS 文件只是參考。新案與 canonical repo 身份是 Career 2.0，不延伸舊 Job-Ops；正式對外品牌尚未決定。
 
-交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → complete M1 Foundation hardening within approved threat model → H5 real Electron startup validation → read-only M1 review → OpenSpec sync/archive → commit → M1 product vertical slices。現有架構契約與保留圖記錄產品規則及技術邊界；Foundation code 不代表產品功能已上線。
+交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → complete M1 Foundation hardening within approved threat model → H5 real Electron startup validation → read-only M1 review → OpenSpec sync/archive → commit/push → named M1 product-domain prerequisite (`m1-opportunity-evidence-substrate`) implementation → prerequisite read-only acceptance → prerequisite OpenSpec archive/commit/push → M2 planning repair/read-only review → M1 Workspace/product vertical slices → M2 Intelligence implementation。`m2-intelligence-vertical-slice` 目前只完成 planning；其 prerequisite gate 已滿足，但 planning review 尚未完成，因此尚不可 apply。現有架構契約與保留圖記錄產品規則及技術邊界；Foundation 與 minimum substrate code 不代表完整產品功能已上線。
 
 OpenSpec 的責任是 project-local 的個別 change lifecycle：proposal、delta specs、design、tasks、apply、verify、sync/archive。它不取代 PLAN、PRODUCT_PLAN、CURRENT_ARCHITECTURE 或 OSS_REUSE 的 authority；`openspec/specs/` 的 baseline 是 approved target behavior，不是已實作證明。T01/T02 只保留為 PRE_OPENSPEC_BASELINE_HISTORY，不重建為 OpenSpec historical changes。Engineering Memory 仍是 optional cross-project learning，沒有 runtime、binding 或同步關係。
 
 Change sizing rule：`ONE_OPENSPEC_CHANGE = ONE_COHERENT_BEHAVIORAL_OR_ENGINEERING_CHANGE`。M1 不合併成單一巨型 change，也不為每個微小檔案編輯建立 change。
+
+## Active M2 planning boundary
+
+`m2-intelligence-vertical-slice` 是目前的 M2 intelligence planning change，
+狀態為 `PLANNING_ACTIVE / IMPLEMENTATION_NOT_STARTED`。它只規劃單一
+Opportunity、單一 JD revision、固定 Evidence snapshot、可追溯的
+requirements/matches/gaps、versioned positioning，以及 bounded candidate
+ execution；不代表完整 product-domain runtime 已存在。
+
+M2 的硬性前置是 [`m1-opportunity-evidence-substrate`](../../openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/)，其最小 implementation、validation 與獨立 acceptance 已完成並 archive；該 gate 已滿足。M2 詳細的 identity、taxonomy、traceability、execution、migration 與 backup authority contract 由 active change 的 proposal/spec/design/tasks 擁有；目前仍須先完成 M2 planning repair 與 read-only planning review，本文件只保留 current boundary 與 dependency，不複製整份 M2 spec。
 
 ## Active derived diagrams
 
@@ -53,9 +63,9 @@ Change sizing rule：`ONE_OPENSPEC_CHANGE = ONE_COHERENT_BEHAVIORAL_OR_ENGINEERI
 
 ## Proposed 執行形式
 
-一個單人應用擁有 canonical 寫入責任；以六個產品領域整理責任，不拆多服務。M1 Career Evidence 可手動建立/編輯/確認，與 Opportunity 共同支撐工作區；送出快照封存當時引用。M1 Interaction 限九項紀錄，不包含 CRM pipeline/scoring/campaign/automation。M2 AI 產生候選；domain rules 與人確認決定是否接納。公開研究與 recruiter 說法保留來源，不提高為無條件事實。
+一個單人應用擁有 canonical 寫入責任；以六個產品領域整理責任，不拆多服務。最小 M1 Career Evidence 與 Opportunity/JD substrate 已由 main process 經 narrow boundary 實作，與後續工作區共同支撐；完整送出、互動、面試與工作區流程仍屬後續 scope。M2 AI 產生候選；domain rules 與人確認決定是否接納。公開研究與 recruiter 說法保留來源，不提高為無條件事實。
 
-T01 已選定 M1 capability boundary：Electron stable v44 line + React/Vite renderer、SQLite through `better-sqlite3`、native filesystem/path/crypto/test APIs，以及 `fflate` ZIP container。Foundation dependency pins 與 ABI probe 曾通過；目前只實作 Foundation runtime，不代表完整產品功能已上線。
+T01 已選定 M1 capability boundary：Electron stable v44 line + React/Vite renderer、SQLite through `better-sqlite3`、native filesystem/path/crypto/test APIs，以及 `fflate` ZIP container。Foundation dependency pins 與 ABI probe 曾通過；目前實作 Foundation runtime 與最小 Opportunity/Evidence substrate，不代表完整產品功能已上線。
 
 ## T01 M1 selected capability boundary
 
@@ -65,7 +75,7 @@ Status：CONCEPTUAL SELECTION，2026-09-12。此處只記錄 T01 能力選型，
 - Structured state：SQLite via `better-sqlite3` behind a replaceable persistence boundary. Evidence revisions, Opportunity state, interactions, application events and submission references remain T02 domain contracts.
 - Files and identity：native `fs`/`path`/`crypto`; the configured private root remains outside Git, and generated content cannot promote itself to Evidence.
 - Backup：`fflate` supplies only the ZIP container. Career 2.0 owns the sorted manifest, SHA-256 entries, complete pre-restore validation, new-root staging and no-silent-merge policy.
-- Validation：Node `node:test` plus native fixtures is the selected validation approach; current Foundation test evidence is recorded in the archived OpenSpec change. M1 product UI acceptance remains separate.
+- Validation：Node `node:test` plus native fixtures is the selected validation approach; current Foundation and prerequisite substrate evidence is recorded in the active/archived OpenSpec changes. Full M1 product UI acceptance remains separate.
 - Replacement gate：the selected SQLite binding passed its synthetic Electron open/write/transaction/reopen gate on 2026-09-15. Earlier 2026-09-16 runtime attempts ended with Electron SIGABRT before probe output, but the final fresh PID 79150 H5 acceptance passed; no dependency change is justified or made.
 
 The detailed current-source audit, score matrices, license records and rejected
@@ -73,7 +83,7 @@ options are maintained in [OSS_REUSE.md](../OSS_REUSE.md). No T01 decision
 changes the five product invariants or the T02 canonical/generated/derived/
 immutable boundaries.
 
-## Current M1 Foundation implementation status
+## Current M1 Foundation and prerequisite implementation status
 
 Foundation hardening implementation is complete within the approved M1
 threat model. The implementation checks canonical `.career2` and state-file
@@ -84,17 +94,33 @@ holds a kernel-managed `O_EXLOCK` lease), checks ownership through READY publica
 symlink/hard-link confinement cases pass. An active same-user replacement of
 `.career2` between validation and lock open remains unmitigated by decision;
 it is an explicit M1 non-goal/future-hardening item and its fixture is skipped.
-The foundation suite is 17 passed, 1 skipped, 0 failed; renderer build passes.
+The foundation suite is 17 passed, 1 skipped, 0 failed; prerequisite domain
+tests and the repair regressions extend the current run to 36 passed, 1 skipped,
+0 failed, including migration ownership-loss rollback, degraded-foundation
+fallback, true cross-process restart/read-back, domain-schema readiness checks,
+and public status plus direct domain-IPC error-boundary checks; renderer build passes. The
+named prerequisite implementation is complete for its
+minimum substrate, but its separate read-only acceptance is pending.
+The fresh bounded prerequisite Electron probe on 2026-09-17 used PID 54523
+and passed the real main/renderer/preload/IPC path, synthetic Opportunity/JD
+and Evidence/revision operations, metadata/root binding, visible observation,
+and clean ownership reacquisition; the formal prerequisite acceptance remains
+pending. A separate direct Electron probe also passed the public domain-error
+transport through `ipcRenderer.invoke -> preload -> renderer`, including
+private-path, SQLite/config, stack, unknown-code, known-classification, and
+success controls; successful payloads remained unchanged.
 H5 is now PASS: fresh PID 79150 loaded the actual Career 2.0 main entry,
 created a visible 900x680 BrowserWindow, loaded the local renderer, exercised
 the preload and narrow IPC status capability, initialized the synthetic
 private-root store to READY version 1 with expected identity/root binding,
 held an 8-second visible observation window, and exited with code 0 / signal
 null after ownership reacquisition. The user observed the window during the
-observation interval. The test-only probe captures the production
-BrowserWindow constructor through a temporary CommonJS module-loader view;
-production window behavior and dependencies were unchanged. Read-only M1
-acceptance review passed and the OpenSpec change is archived.
+observation interval. The test-only probe verifies the production
+BrowserWindow configuration from the checked-in main source and proves preload
+execution through the actual narrow IPC handshake; production window behavior
+and dependencies were unchanged. Read-only M1
+acceptance review passed and the OpenSpec change is archived. The prerequisite
+change remains active until its separate acceptance review.
 
 ## T02 M1 executable architecture contracts
 
@@ -245,7 +271,7 @@ PASS requires exact acceptance behavior, no hidden fallback, no unresolved data-
 | Local runtime/application framework | One local application, one writer, configurable private root, no required server/network, accessible controls | Mature OSS/native capability, small footprint, replaceable modules, easy test execution | Custom browser runtime, agent runtime, provider router, plugin framework | Multi-user/cloud runtime |
 | Testing/validation | Deterministic domain/persistence/filesystem/backup/immutability/privacy checks plus manual UI acceptance | Existing/native test capability, readable fixtures, stable artifact evidence | Large test platform before need is proven, automatic visual grid by default | M2 AI/renderer evaluation and advanced semantic review |
 
-T01 compared existing/native/OSS options against these requirements and recorded exit/migration cost, privacy behavior, license, maintenance, interfaces and current-source evidence in [OSS_REUSE.md](../OSS_REUSE.md). The selection is historical; the archived OpenSpec change records installed pins and foundation probes. No product-domain behavior is implied by those probes.
+T01 compared existing/native/OSS options against these requirements and recorded exit/migration cost, privacy behavior, license, maintenance, interfaces and current-source evidence in [OSS_REUSE.md](../OSS_REUSE.md). The selection is historical; the archived OpenSpec change records installed pins and foundation probes. Those probes do not imply full product-domain behavior; the named minimum substrate is recorded separately above and in its active OpenSpec change.
 
 ### 11. Deferred architecture
 

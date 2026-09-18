@@ -1,6 +1,6 @@
 # Authority and Ownership Map
 
-Scope：本案資料權威。Current：M1 Foundation runtime 已建立並通過 acceptance、OpenSpec 已 archive，但圖中的產品-domain flows 尚未實作；五條產品 invariant 已於 R1 凍結，下圖仍是產品流程的 Proposed view。
+Scope：本案資料權威。Current：M1 Foundation runtime 已建立並通過 acceptance；`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Evidence/revision substrate 已完成 implementation、synthetic validation、read-only acceptance 與 archive。完整產品-domain flows 尚未實作；五條產品 invariant 已於 R1 凍結，下圖仍是完整產品流程的 Proposed view。
 
 ```mermaid
 flowchart LR
@@ -20,7 +20,7 @@ flowchart LR
 
 - Owner：人決定自己的事實與對外使用；應用程式是唯一寫入協調者；AI 提供候選。
 - Source of truth：Evidence 保存確認的自述/支持來源；JD/Interaction 保存「來源說過什麼」；Submission 保存當時實際送出內容。
-- Boundary / read-write：生成文句只能寫草稿，不能提升為 Evidence；回饋先進提案。M1 人工記錄歷史材料可直接保存，不要求 M2 檢查；缺少當時引用必須標未知。
+- Boundary / read-write：最小 Opportunity/JD 與 Evidence/revision records 由 main process 的 canonical writer 經 narrow operations 保存；生成文句只能寫草稿，不能提升為 Evidence；回饋先進提案。M1 人工記錄歷史材料可直接保存，不要求 M2 檢查；缺少當時引用必須標未知。
 - Invariants：引用固定 revision 並能還原內容；送出 content/submitted_at/opportunity/source/當時引用不隨新版更動；面試指向實際送出版本。來源明確不等於外部事實已證實；事後補充另記，不回填原快照。
-- Open questions：具體儲存交易與 revision ID 形式待 T01/T02；Insufficient evidence。
-- Validation evidence：對照附件 evidence-first、CV/Interview consistency 與本輪版本要求；Foundation ownership/private-root boundary 與 M1 acceptance 已驗證，產品-domain flows 與測試仍未執行。
+- Open questions：完整 Workspace 的儲存交易、產品流程與跨產物引用仍 deferred；最小 substrate 的 stable IDs、JD/Evidence revision 與 provenance 已實作並由受影響測試驗證。
+- Validation evidence：Foundation ownership/private-root boundary 與 M1 acceptance 已驗證；最小 Opportunity/JD、Evidence/revision、restart/read-back、migration 與 narrow-boundary tests 已執行。完整產品-domain flows 與 M2 intelligence 尚未執行。

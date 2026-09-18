@@ -67,6 +67,68 @@ function requirement(overrides = {}) {
   });
 }
 
+function validEvaluation(classification, overrides = {}) {
+  const defaults = {
+    DIRECT: {
+      completeSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: ['evidence-revision-1'],
+      missingDimensions: [],
+    },
+    STRONG_ADJACENT: {
+      adjacentSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: ['evidence-revision-1'],
+      boundary: 'Different synthetic domain.',
+    },
+    PARTIAL: {
+      partialSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: ['evidence-revision-1'],
+      missingDimensions: ['scale'],
+    },
+    NO_MATCH: {
+      evidenceComplete: true,
+      no_match: true,
+      supportedEvidenceRevisionIds: [],
+    },
+    INSUFFICIENT_EVIDENCE: {
+      ambiguous: true,
+      evidenceComplete: false,
+      supportedEvidenceRevisionIds: [],
+      missingDimensions: [],
+    },
+  }[classification];
+  const evaluation = { ...defaults, ...overrides };
+  const missingDimensions = evaluation.missingDimensions || [];
+  const explanation_details = {
+    DIRECT: { support_summary: 'Synthetic Evidence covers the requested work.', scope_summary: 'The evaluated material dimensions are covered.' },
+    STRONG_ADJACENT: { transferable_support: 'The Evidence shows transferable behavior.', direct_boundary: evaluation.boundary || 'Different synthetic domain.' },
+    PARTIAL: { supported_dimensions: ['core responsibility'], missing_dimensions: missingDimensions },
+    NO_MATCH: { evaluation_basis: 'The complete synthetic snapshot was evaluated.', unsupported_relation_summary: 'no related support was confirmed.' },
+    INSUFFICIENT_EVIDENCE: {
+      insufficiency_reason: overrides.no_match || (overrides.adjacentSupport && overrides.partialSupport)
+        ? 'CONFLICTING_DECISION_FACTS'
+        : (overrides.ambiguous === false ? 'INCOMPLETE_EVALUATION' : 'AMBIGUOUS_EVIDENCE'),
+    },
+  }[classification];
+  let explanation;
+  if (classification === 'DIRECT') explanation = `${explanation_details.support_summary} Scope: ${explanation_details.scope_summary}`;
+  if (classification === 'STRONG_ADJACENT') explanation = `${explanation_details.transferable_support} Boundary: ${explanation_details.direct_boundary}`;
+  if (classification === 'PARTIAL') explanation = `${explanation_details.supported_dimensions.join(', ')} supported; missing dimensions: ${explanation_details.missing_dimensions.join(', ')}`;
+  if (classification === 'NO_MATCH') explanation = `${explanation_details.evaluation_basis} No supported relation: ${explanation_details.unsupported_relation_summary}`;
+  if (classification === 'INSUFFICIENT_EVIDENCE') {
+    const reason = {
+      MISSING_EVIDENCE: 'required Evidence is missing.',
+      AMBIGUOUS_EVIDENCE: 'the Evidence is ambiguous.',
+      INCOMPLETE_EVALUATION: 'the evaluation is incomplete.',
+      CONFLICTING_DECISION_FACTS: 'the decision facts conflict.',
+    }[explanation_details.insufficiency_reason];
+    explanation = `Insufficient evidence: ${reason}`;
+  }
+  return { ...evaluation, explanation, explanation_details };
+}
+
 test('canonical serialization and deterministic identities are stable across retries and generations', () => {
   assert.equal(intelligence.canonicalSerialize({ b: 2, a: 1 }), intelligence.canonicalSerialize({ a: 1, b: 2 }));
   assert.notEqual(intelligence.canonicalSerialize(['a', 'b']), intelligence.canonicalSerialize(['b', 'a']));
@@ -151,6 +213,22 @@ test('requirement finite vocabularies and uncertainty fail closed', () => {
   for (const sourceRef of ['section:does-not-resolve', 'paragraph:does-not-resolve', 'char:1-2', 'anchor:does-not-resolve']) {
     assert.throws(() => requirement({ sourceRef }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
   }
+  assert.deepEqual(
+    requirement({ sourceRef: { locator: 'jd:line:1', jd_revision_id: 'jd-revision-1' } }).source_ref,
+    { locator: 'jd:line:1', jd_revision_id: 'jd-revision-1' },
+  );
+  assert.deepEqual(
+    requirement({ sourceRef: { locator: 'jd:offset:0', jd_revision_id: 'jd-revision-1', start: 0, end: 0 } }).source_ref,
+    { locator: 'jd:offset:0', jd_revision_id: 'jd-revision-1', start: 0, end: 0 },
+  );
+  assert.deepEqual(
+    requirement({ sourceRef: { locator: 'jd:offset:0', jd_revision_id: 'jd-revision-1', start: 0 } }).source_ref,
+    { locator: 'jd:offset:0', jd_revision_id: 'jd-revision-1', start: 0 },
+  );
+  assert.throws(() => requirement({ sourceRef: { locator: 'jd:line:1', jd_revision_id: 'jd-other' } }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
+  assert.throws(() => requirement({ sourceRef: { locator: 'jd:line:1', start: 999 } }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
+  assert.throws(() => requirement({ sourceRef: { locator: 'jd:offset:0-2', start: 0, end: 1 } }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
+  assert.throws(() => requirement({ sourceRef: { locator: 'jd:line:1', metadata: 'ignored' } }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
   assert.throws(() => requirement({ requirementType: 'OTHER' }), { code: 'INTELLIGENCE_UNKNOWN_STATE' });
   assert.throws(() => requirement({ priority: 'OTHER' }), { code: 'INTELLIGENCE_UNKNOWN_STATE' });
   assert.throws(() => requirement({ explicitness: 'OTHER' }), { code: 'INTELLIGENCE_UNKNOWN_STATE' });
@@ -166,13 +244,7 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   const direct = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: {
-      completeSupport: true,
-      evidenceComplete: true,
-      supportedEvidenceRevisionIds: revisions.map((item) => item.evidence_revision_id),
-      missingDimensions: [],
-      explanation: 'Both synthetic Evidence revisions cover all material dimensions.',
-    },
+    evaluation: validEvaluation('DIRECT', { supportedEvidenceRevisionIds: revisions.map((item) => item.evidence_revision_id) }),
   });
   assert.equal(direct.classification, 'DIRECT');
   assert.equal(direct.gap_id, null);
@@ -181,13 +253,7 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   const adjacent = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: {
-      adjacentSupport: true,
-      evidenceComplete: true,
-      supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
-      boundary: 'Different synthetic domain.',
-      explanation: 'Transferable behavior with a different context.',
-    },
+    evaluation: validEvaluation('STRONG_ADJACENT', { supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id] }),
   });
   assert.equal(adjacent.classification, 'STRONG_ADJACENT');
   assert.ok(adjacent.gap_id);
@@ -195,20 +261,14 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   const partial = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: {
-      partialSupport: true,
-      evidenceComplete: true,
-      supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
-      missingDimensions: ['scale'],
-      explanation: 'Core responsibility supported; scale remains unknown.',
-    },
+    evaluation: validEvaluation('PARTIAL', { supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id] }),
   });
   assert.equal(partial.classification, 'PARTIAL');
 
   const noMatch = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: { evidenceComplete: true, explanation: 'Complete synthetic snapshot contains no related support.' },
+    evaluation: validEvaluation('NO_MATCH'),
   });
   assert.equal(noMatch.classification, 'NO_MATCH');
   assert.ok(noMatch.gap_id);
@@ -216,21 +276,25 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   const insufficient = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: { ambiguous: true, evidenceComplete: false, explanation: 'Source anchor is ambiguous.' },
+    evaluation: validEvaluation('INSUFFICIENT_EVIDENCE'),
   });
   assert.equal(insufficient.classification, 'INSUFFICIENT_EVIDENCE');
   assert.ok(insufficient.gap_id);
 
-  const keywordOnly = intelligence.classifyMatch({
+  assert.throws(() => intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
     evaluation: { score: 1, keywords: ['build', 'systems'], explanation: 'The evaluator did not receive structured support facts.' },
-  });
-  assert.equal(keywordOnly.classification, 'INSUFFICIENT_EVIDENCE');
+  }), { code: 'INTELLIGENCE_MATCH_INVALID' });
   const incompleteSupport = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: { completeSupport: true, evidenceComplete: false, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id], explanation: 'The Evidence snapshot is incomplete for a safe decision.' },
+    evaluation: validEvaluation('INSUFFICIENT_EVIDENCE', {
+      ambiguous: false,
+      completeSupport: true,
+      evidenceComplete: false,
+      supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
+    }),
   });
   assert.equal(incompleteSupport.classification, 'INSUFFICIENT_EVIDENCE');
   for (const priority of ['MEDIUM', 'LOW', 'UNKNOWN']) {
@@ -248,15 +312,14 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   const conflict = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: {
+    evaluation: validEvaluation('INSUFFICIENT_EVIDENCE', {
       adjacentSupport: true,
       partialSupport: true,
       evidenceComplete: true,
       supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
       boundary: 'The context differs from the requirement.',
       missingDimensions: ['scale'],
-      explanation: 'Conflicting relation facts prevent a safe classification.',
-    },
+    }),
   });
   assert.equal(conflict.classification, 'INSUFFICIENT_EVIDENCE');
   assert.throws(() => intelligence.classifyMatch({
@@ -310,6 +373,38 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
     decision_facts: { ...direct.decision_facts, complete_support: false },
   }, fixed), { code: 'INTELLIGENCE_MATCH_INVALID' });
   assert.throws(() => intelligence.classifyMatch({ requirement: req, evidenceSnapshot: fixed, classification: 'KEYWORD_MATCH', evaluation: {} }), { code: 'INTELLIGENCE_UNKNOWN_TAXONOMY' });
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { noMatch: true, evidenceComplete: true, explanation: 'No supported relation.' },
+  }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  const explicitNoMatchConflict = intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: validEvaluation('INSUFFICIENT_EVIDENCE', {
+      ambiguous: false,
+      no_match: true,
+      completeSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
+    }),
+  });
+  assert.equal(explicitNoMatchConflict.classification, 'INSUFFICIENT_EVIDENCE');
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: {
+      completeSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
+      explanation: 'No supported relation.',
+      explanation_details: { support_summary: 'Synthetic Evidence covers the requested work.', scope_summary: 'The evaluated material dimensions are covered.' },
+    },
+  }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  assert.throws(() => intelligence.validateMatchRecord({
+    ...direct,
+    decision_facts: { ...direct.decision_facts, noMatch: false },
+  }, fixed), { code: 'INTELLIGENCE_MATCH_INVALID' });
 });
 
 test('traceability and positioning claim edges reject unsupported or gap-as-fact claims', () => {
@@ -318,7 +413,7 @@ test('traceability and positioning claim edges reject unsupported or gap-as-fact
   const match = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: { completeSupport: true, evidenceComplete: true, supportedEvidenceRevisionIds: fixed.evidence_revision_ids, explanation: 'Complete support.' },
+    evaluation: validEvaluation('DIRECT', { supportedEvidenceRevisionIds: fixed.evidence_revision_ids }),
   });
   const trace = intelligence.validateTraceability({ jdSourceRef: req.source_ref, jdRevisionId: req.jd_revision_id, requirement: req, match, snapshot: fixed });
   assert.equal(trace.input_generation, 'generation-1');
@@ -333,7 +428,7 @@ test('traceability and positioning claim edges reject unsupported or gap-as-fact
     claims: [{ requirementId: req.requirement_id, matchId: match.match_id, evidenceRevisionIds: match.evidence_revision_ids, claimText: 'Show supported ownership.' }],
   });
   assert.equal(claims[0].positioning_claim_id, `${posId}:claim:1`);
-  const gap = intelligence.classifyMatch({ requirement: req, evidenceSnapshot: fixed, evaluation: { evidenceComplete: true, explanation: 'No relation.' } });
+  const gap = intelligence.classifyMatch({ requirement: req, evidenceSnapshot: fixed, evaluation: validEvaluation('NO_MATCH') });
   const gapClaims = intelligence.validatePositioningClaimEdges({
     positioningVersionId: posId,
     requirements: [req],
@@ -458,16 +553,41 @@ test('intelligence migration and domain operations preserve M1 state across rest
     ...requirementInput,
     analysisId: input.analysis_id,
   });
+  const objectReq = store.intelligence.saveRequirement({
+    ...requirementInput,
+    analysisId: input.analysis_id,
+    sourceRef: { locator: 'jd:line:1', jd_revision_id: jd.jdRevisionId },
+    normalizedContent: 'Build reliable local systems from an object source anchor.',
+  });
+  assert.deepEqual(objectReq.source_ref, { locator: 'jd:line:1', jd_revision_id: jd.jdRevisionId });
+  assert.deepEqual(store.intelligence.getRequirement(objectReq.requirement_id).source_ref, objectReq.source_ref);
+  assert.throws(() => store.intelligence.saveRequirement({
+    ...requirementInput,
+    analysisId: input.analysis_id,
+    sourceRef: { locator: 'jd:line:1', jd_revision_id: 'wrong-jd' },
+  }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
+  assert.throws(() => store.intelligence.saveRequirement({
+    ...requirementInput,
+    analysisId: input.analysis_id,
+    sourceRef: { locator: 'jd:offset:0-999', jd_revision_id: jd.jdRevisionId, start: 0, end: 999 },
+  }), { code: 'INTELLIGENCE_UNAVAILABLE' });
   const match = store.intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: input.evidence_snapshot,
-    evaluation: { completeSupport: true, evidenceComplete: true, supportedEvidenceRevisionIds: [confirmed.currentRevisionId], explanation: 'Synthetic direct support.' },
+    evaluation: validEvaluation('DIRECT', { supportedEvidenceRevisionIds: [confirmed.currentRevisionId] }),
   });
   store.intelligence.saveMatch(match);
   assert.equal(store.intelligence.saveMatch(match).match_id, match.match_id);
+  assert.throws(() => store.intelligence.saveMatch({ ...match, jd_revision_id: 'wrong-jd' }), { code: 'INTELLIGENCE_PROVENANCE_INVALID' });
   assert.throws(() => store.intelligence.saveMatch({
     ...match,
-    explanation: 'Conflicting immutable match result.',
+    evidence_snapshot: input.evidence_snapshot,
+    evidence_snapshot_id: 'wrong-snapshot',
+  }), { code: 'INTELLIGENCE_PROVENANCE_INVALID' });
+  assert.throws(() => store.intelligence.saveMatch({
+    ...match,
+    explanation: 'Altered support. Scope: Altered scope.',
+    explanation_details: { support_summary: 'Altered support.', scope_summary: 'Altered scope.' },
   }), { code: 'INTELLIGENCE_IDENTITY_CONFLICT' });
   const position = store.intelligence.savePositioningVersion({
     opportunityId: opportunity.opportunityId,
@@ -495,7 +615,7 @@ test('intelligence migration and domain operations preserve M1 state across rest
   const gap = store.intelligence.classifyMatch({
     requirement: gapReq,
     evidenceSnapshot: input.evidence_snapshot,
-    evaluation: { evidenceComplete: true, explanation: 'Synthetic evaluation found no supported relation.' },
+    evaluation: validEvaluation('NO_MATCH'),
   });
   store.intelligence.saveMatch(gap);
   const gapPosition = store.intelligence.savePositioningVersion({
@@ -521,6 +641,7 @@ test('intelligence migration and domain operations preserve M1 state across rest
   assert.equal(store.intelligence.getInputGeneration(input.analysis_id).evidence_revision_ids[0], confirmed.currentRevisionId);
   assert.equal(store.intelligence.getRequirement(req.requirement_id).requirement_id, req.requirement_id);
   assert.equal(store.intelligence.getRequirement(req.requirement_id).source_ref, req.source_ref);
+  assert.deepEqual(store.intelligence.getRequirement(objectReq.requirement_id).source_ref, objectReq.source_ref);
   assert.equal(store.intelligence.getMatch(match.match_id).classification, 'DIRECT');
   assert.equal(store.intelligence.getPositioningVersion(position.positioning_version_id).claims[0].positioning_claim_id, position.claims[0].positioning_claim_id);
 });

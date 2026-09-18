@@ -15,6 +15,8 @@ const {
   buildInputBundle,
   canonicalSerialize,
   classifyMatch,
+  parseMatchExplanation,
+  serializeMatchExplanation,
   validateMatchRecord,
   validateMatchableRequirement,
   validatePositioningClaimEdges,
@@ -908,7 +910,7 @@ function assertIntelligenceDataIntegrity(database) {
     UNION ALL
     SELECT requirement_id FROM intelligence_requirements WHERE json_valid(source_ref_json) = 0 OR json_valid(uncertainty_json) = 0
     UNION ALL
-    SELECT match_id FROM intelligence_matches WHERE json_valid(decision_facts_json) = 0 OR json_valid(evidence_revision_ids_json) = 0 OR json_valid(missing_dimensions_json) = 0
+    SELECT match_id FROM intelligence_matches WHERE json_valid(decision_facts_json) = 0 OR json_valid(evidence_revision_ids_json) = 0 OR json_valid(missing_dimensions_json) = 0 OR json_valid(explanation) = 0
     UNION ALL
     SELECT positioning_version_id FROM intelligence_positioning_versions WHERE json_valid(claims_json) = 0
     UNION ALL
@@ -972,7 +974,7 @@ function assertIntelligenceDataIntegrity(database) {
       invalidData(`Intelligence requirement is invalid: ${error.message}`);
     }
     if (requirement.requirement_id !== row.requirement_id) invalidData('Intelligence requirement identity is invalid.');
-    if (!requirement.ready || jd.availability_status !== 'AVAILABLE' || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content)) invalidData('Intelligence requirement is unavailable or its source anchor is not resolvable.');
+    if (!requirement.ready || jd.availability_status !== 'AVAILABLE' || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content, requirement.jd_revision_id)) invalidData('Intelligence requirement is unavailable or its source anchor is not resolvable.');
     requirements.set(row.requirement_id, requirement);
   }
 
@@ -983,6 +985,7 @@ function assertIntelligenceDataIntegrity(database) {
     if (!requirement || requirement.jd_revision_id !== row.jd_revision_id || row.input_generation !== snapshot.input_generation) invalidData('Intelligence match provenance is invalid.');
     let match;
     try {
+      const storedExplanation = parseMatchExplanation(row.explanation);
       match = validateMatchRecord({
         match_id: row.match_id,
         gap_id: row.gap_id,
@@ -994,7 +997,8 @@ function assertIntelligenceDataIntegrity(database) {
         decision_facts: parseRecordJson(row.decision_facts_json, 'match decision facts'),
         evidence_revision_ids: parseRecordJson(row.evidence_revision_ids_json, 'match Evidence'),
         missing_dimensions: parseRecordJson(row.missing_dimensions_json, 'match missing dimensions'),
-        explanation: row.explanation,
+        explanation: storedExplanation.explanation,
+        explanation_details: storedExplanation.explanation_details,
         boundary: row.boundary,
       }, snapshot, requirement);
     } catch (error) {
@@ -1576,23 +1580,24 @@ function intelligenceSourceIsUnavailable(sourceRef) {
   return typeof locator === 'string' && /^unavailable:/i.test(locator);
 }
 
-function intelligenceSourceResolvesToJd(sourceRef, content) {
+function intelligenceSourceResolvesToJd(sourceRef, content, expectedJdRevisionId) {
   if (intelligenceSourceIsUnavailable(sourceRef) || typeof content !== 'string' || content.length === 0) return false;
   const locator = typeof sourceRef === 'string' ? sourceRef : sourceRef?.locator ?? sourceRef?.anchor ?? sourceRef?.source;
+  if (typeof sourceRef === 'object' && sourceRef?.jd_revision_id !== undefined && sourceRef.jd_revision_id !== expectedJdRevisionId) return false;
   const lineMatch = /^(?:jd:)?line:(\d+)$/i.exec(locator);
   if (lineMatch) {
     const lineNumber = Number(lineMatch[1]);
-    return lineNumber >= 1 && lineNumber <= content.split(/\r?\n/).length;
+    return lineNumber >= 1 && lineNumber <= content.split(/\r?\n/).length
+      && (typeof sourceRef !== 'object' || (sourceRef.start === undefined && sourceRef.end === undefined));
   }
   const offsetMatch = /^(?:jd:)?offset:(\d+)(?:-(\d+))?$/i.exec(locator);
   if (offsetMatch) {
-    const start = Number(offsetMatch[1]);
-    const end = offsetMatch[2] === undefined ? start : Number(offsetMatch[2]);
+    const locatorStart = Number(offsetMatch[1]);
+    const locatorEnd = offsetMatch[2] === undefined ? locatorStart : Number(offsetMatch[2]);
+    const start = typeof sourceRef === 'object' && sourceRef.start !== undefined ? sourceRef.start : locatorStart;
+    const end = typeof sourceRef === 'object' && sourceRef.end !== undefined ? sourceRef.end : locatorEnd;
+    if (start !== locatorStart || end !== locatorEnd) return false;
     return start >= 0 && end >= start && end <= content.length;
-  }
-  if (typeof sourceRef === 'object' && Number.isSafeInteger(sourceRef.start)) {
-    const end = sourceRef.end === undefined ? sourceRef.start : sourceRef.end;
-    return sourceRef.start >= 0 && end >= sourceRef.start && end <= content.length;
   }
   return false;
 }
@@ -1660,6 +1665,10 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       const suppliedEvidenceId = input.evidence_id ?? input.evidenceId;
       if (suppliedEvidenceId !== undefined && suppliedEvidenceId !== supplied.evidence_id) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence identity does not match the supplied snapshot.');
+      }
+      const suppliedSnapshotId = input.evidence_snapshot_id ?? input.evidenceSnapshotId;
+      if (suppliedSnapshotId !== undefined && suppliedSnapshotId !== supplied.evidence_snapshot_id) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence snapshot identity does not match the supplied snapshot.');
       }
       const canonical = buildEvidenceSnapshot({
         evidenceRevisionIds: supplied.evidence_revision_ids,
@@ -1834,7 +1843,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       if (!requirement.ready) throw new FoundationPersistenceError('INTELLIGENCE_REQUIREMENT_NOT_READY', 'Requirement is not ready for persistence.');
       const jd = database.prepare('SELECT jd_revision_id, content, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(requirement.jd_revision_id);
       if (!jd) throw new FoundationPersistenceError('JD_REVISION_INVALID', 'Requirement JD revision does not exist.');
-      if (jd.availability_status !== 'AVAILABLE' || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content)) {
+      if (jd.availability_status !== 'AVAILABLE' || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content, requirement.jd_revision_id)) {
         throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Requirement source is unavailable.');
       }
       const analysisId = input.analysis_id ?? input.analysisId ?? null;
@@ -1904,6 +1913,14 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       const requirement = readRequirement(requestedRequirementId);
       if (!requirement) throw new FoundationPersistenceError('INTELLIGENCE_REQUIREMENT_NOT_FOUND', 'Match requirement does not exist.');
       validateMatchableRequirement(requirement);
+      const suppliedJdRevisionId = input.jd_revision_id ?? input.jdRevisionId;
+      if (suppliedJdRevisionId !== undefined && suppliedJdRevisionId !== requirement.jd_revision_id) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match JD revision identity does not match the canonical requirement.');
+      }
+      const suppliedRequirementId = input.requirement_id ?? input.requirementId;
+      if (suppliedRequirementId !== undefined && suppliedRequirementId !== requirement.requirement_id) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement identity does not match the canonical requirement.');
+      }
       if (suppliedRequirement && canonicalSerialize(validateRequirement(suppliedRequirement)) !== canonicalSerialize(requirement)) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement does not match the canonical persisted requirement.');
       }
@@ -1915,7 +1932,8 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
           throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match does not resolve to its immutable input generation.');
         }
       }
-      if (input.input_generation !== undefined && String(input.input_generation) !== snapshot.input_generation) {
+      const suppliedInputGeneration = input.input_generation ?? input.inputGeneration;
+      if (suppliedInputGeneration !== undefined && String(suppliedInputGeneration) !== snapshot.input_generation) {
         throw new FoundationPersistenceError('INTELLIGENCE_GENERATION_MISMATCH', 'Match input generation does not match its Evidence snapshot.');
       }
       const match = validateMatchRecord({
@@ -1958,7 +1976,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
           canonicalSerialize(match.decision_facts),
           canonicalSerialize(match.evidence_revision_ids),
           canonicalSerialize(match.missing_dimensions),
-          match.explanation,
+          serializeMatchExplanation(match),
           match.boundary ?? null,
           new Date().toISOString(),
         );
@@ -1973,6 +1991,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     if (!row) return null;
     const snapshot = readSnapshot(row.evidence_snapshot_id);
     const requirement = readRequirement(row.requirement_id);
+    const storedExplanation = parseMatchExplanation(row.explanation);
     return validateMatchRecord({
       match_id: row.match_id,
       gap_id: row.gap_id,
@@ -1984,7 +2003,8 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       decision_facts: intelligenceStoredJson(row.decision_facts_json, 'decision_facts_json'),
       evidence_revision_ids: intelligenceStoredJson(row.evidence_revision_ids_json, 'evidence_revision_ids_json'),
       missing_dimensions: intelligenceStoredJson(row.missing_dimensions_json, 'missing_dimensions_json'),
-      explanation: row.explanation,
+      explanation: storedExplanation.explanation,
+      explanation_details: storedExplanation.explanation_details,
       ...(row.boundary ? { boundary: row.boundary } : {}),
     }, snapshot, requirement);
   }

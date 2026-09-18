@@ -4,13 +4,68 @@ This capability turns one selected Opportunity and job-description revision into
 
 ## ADDED Requirements
 
+### Requirement: The slice provides a minimal Opportunity selection and context surface
+
+The application SHALL provide the M2 intelligence slice with a minimal entry
+surface that lets the user select one existing Opportunity from the accepted
+Opportunity substrate, select one available JD revision for that Opportunity,
+and view the required Opportunity/JD identity, display context, and
+source/provenance metadata. From that selected context, the surface SHALL
+provide explicit entry points to Match & Gaps and Positioning using the same
+`opportunity_id` and `jd_revision_id`. This requirement does not create a full
+Opportunity workspace, general Opportunity CRUD, an Opportunity management
+product, or a general navigation redesign; candidate persona and candidate
+concerns are not outputs of this capability.
+
+If no Opportunity is selected or its JD revision is unavailable, the surface
+SHALL show an unavailable/selection-required state and SHALL NOT silently
+create a record, choose a fallback, or start intelligence execution. Synthetic
+acceptance fixtures MAY create the required substrate records through the
+accepted domain operations before exercising this surface.
+
+#### Scenario: An existing Opportunity and JD revision are selected
+
+- **WHEN** the user selects an existing Opportunity and an available JD revision
+- **THEN** the application shows the required context and exposes Match & Gaps and Positioning entry points bound to the same stable identities
+
+#### Scenario: The selected context is incomplete
+
+- **WHEN** no Opportunity is selected or the selected Opportunity has no available JD revision
+- **THEN** the surface reports selection-required/unavailable, does not start analysis, and does not create or silently substitute a domain record
+
+#### Scenario: The user enters an intelligence view
+
+- **WHEN** the user opens Match & Gaps or Positioning from the selected context
+- **THEN** the view receives the selected Opportunity/JD context and its provenance metadata through the purpose-specific application boundary, without implying that a full Opportunity workspace exists
+
+### Requirement: Intelligence input Evidence is eligible and confirmed
+
+The system SHALL build an Evidence snapshot only from revisions that resolve to the expected Evidence identity, are `CONFIRMED`, have valid provenance, and satisfy the accepted substrate's eligibility rules. The existence of an Evidence revision SHALL NOT make it eligible for intelligence. A draft, unconfirmed, missing, incompatible, or otherwise ineligible revision SHALL fail closed before provider input is constructed; it SHALL not produce a supported match, gap, positioning candidate, or confirmed claim. When no eligible confirmed Evidence is available, the bounded operation SHALL report `UNAVAILABLE`; a matching view that has no usable Evidence MAY expose only `INSUFFICIENT_EVIDENCE` and SHALL not infer a capability gap.
+
+The snapshot SHALL retain the exact ordered confirmed `evidence_revision_ids` and its input generation. Later Evidence revisions SHALL create a newer generation and mark dependent results stale without rewriting the earlier snapshot or its provenance.
+
+#### Scenario: A confirmed Evidence snapshot is accepted
+
+- **WHEN** every selected Evidence revision is `CONFIRMED`, belongs to the expected Evidence identity, has valid provenance, and is eligible
+- **THEN** the application creates the immutable snapshot, sends only those revisions in an authorized request, and preserves their identities for matching and positioning traceability
+
+#### Scenario: A draft or unconfirmed revision is rejected
+
+- **WHEN** any selected Evidence revision is draft, unconfirmed, or otherwise ineligible
+- **THEN** snapshot creation fails closed, no ineligible content is sent to an executor, and no supported match, gap, positioning candidate, or confirmed claim is published
+
+#### Scenario: Confirmed Evidence is missing or unavailable
+
+- **WHEN** no eligible confirmed Evidence revision can be resolved for the selected input
+- **THEN** the bounded operation reports `UNAVAILABLE`, or a matching view reports only `INSUFFICIENT_EVIDENCE` without treating the absence as a capability conclusion
+
 ### Requirement: Intelligence input generations are explicit and available
 
-The system SHALL run each intelligence operation against exactly one accepted Opportunity, one immutable job-description revision, and one immutable Evidence snapshot. The input set SHALL retain `opportunity_id`, `jd_revision_id`, `evidence_snapshot_id`, the ordered `evidence_revision_ids`, `operation_type`, `schema_version`, `execution_id`, `idempotency_key`, and an application-owned input generation. The operation SHALL be blocked as `UNAVAILABLE` when the named `m1-opportunity-evidence-substrate` prerequisite is not accepted or any selected source revision is unavailable.
+The system SHALL run each intelligence operation against exactly one accepted Opportunity, one immutable job-description revision, and one immutable snapshot of eligible `CONFIRMED` Evidence revisions. The input set SHALL retain `opportunity_id`, `jd_revision_id`, `evidence_snapshot_id`, the ordered `evidence_revision_ids`, `operation_type`, `schema_version`, `execution_id`, `idempotency_key`, and an application-owned input generation. The operation SHALL be blocked as `UNAVAILABLE` when the named `m1-opportunity-evidence-substrate` prerequisite is not accepted, the selected JD revision is unavailable, or no eligible confirmed Evidence snapshot can be created.
 
 #### Scenario: A valid selected input set starts an operation
 
-- **WHEN** the user starts a supported operation for an accepted Opportunity, available JD revision, and available Evidence snapshot
+- **WHEN** the user starts a supported operation for an accepted Opportunity, available JD revision, and immutable snapshot of eligible confirmed Evidence
 - **THEN** the application stores the immutable input identities and generation before publishing a candidate result
 
 #### Scenario: The product-domain substrate is not accepted
@@ -48,19 +103,19 @@ Each extracted requirement SHALL contain at least `requirement_id`, `jd_revision
 
 ### Requirement: Matching and gaps use a deterministic evidence taxonomy
 
-The system SHALL evaluate each selected high-priority requirement against zero or more fixed Evidence revisions and SHALL persist one stable relation identity for the requirement and Evidence snapshot. `match_id` SHALL be deterministic for the matching contract version, `jd_revision_id`, `requirement_id`, and `evidence_snapshot_id`; every non-`DIRECT` classification SHALL also carry a deterministic `gap_id` for the same input identity and its gap contract marker. One requirement MAY reference multiple Evidence revisions, and one Evidence revision MAY support multiple requirements.
+The system SHALL evaluate each selected high-priority requirement against zero or more eligible fixed `CONFIRMED` Evidence revisions and SHALL persist one stable relation identity for the requirement and Evidence snapshot. `match_id` SHALL be deterministic for the matching contract version, `jd_revision_id`, `requirement_id`, and `evidence_snapshot_id`; every non-`DIRECT` classification SHALL also carry a deterministic `gap_id` for the same input identity and its gap contract marker. One requirement MAY reference multiple Evidence revisions, and one Evidence revision MAY support multiple requirements.
 
 The final classification SHALL follow this decision table, without a keyword-only rule or arbitrary total score:
 
 | Classification | Required condition | Evidence references | Required explanation |
 | --- | --- | --- | --- |
-| `DIRECT` | All material requirement dimensions, responsibility boundaries, and stated outcomes are supported by one or more fixed Evidence revisions with no unresolved material limitation | One or more | What supports the complete requirement and its scope |
-| `STRONG_ADJACENT` | No Evidence revision establishes the requirement directly, but one or more fixed revisions establish materially transferable behavior in a different context, domain, or scope | One or more | Transferable relation and boundary that prevents direct support |
+| `DIRECT` | All material requirement dimensions, responsibility boundaries, and stated outcomes are supported by one or more eligible fixed `CONFIRMED` Evidence revisions with no unresolved material limitation | One or more | What supports the complete requirement and its scope |
+| `STRONG_ADJACENT` | No eligible Evidence revision establishes the requirement directly, but one or more eligible fixed `CONFIRMED` revisions establish materially transferable behavior in a different context, domain, or scope | One or more | Transferable relation and boundary that prevents direct support |
 | `PARTIAL` | A non-empty subset of the same requirement is supported, while one or more material dimensions, outcomes, or scope limits remain unsupported | One or more | Supported subset and missing dimensions |
 | `NO_MATCH` | The available Evidence snapshot is complete for evaluation and no supported direct, adjacent, or partial relation is found | Zero or more | Evaluation basis and explicit absence of a supported relation |
 | `INSUFFICIENT_EVIDENCE` | The Evidence snapshot is unavailable/incomplete, the requirement source is materially ambiguous, or the available records cannot safely determine a relation | Zero or more | Missing source/evidence or ambiguity; no capability conclusion |
 
-When multiple possible classifications conflict, the application SHALL choose the least-claim-safe classification justified by the table; unresolved ambiguity SHALL be `INSUFFICIENT_EVIDENCE`. `NO_MATCH` SHALL mean evaluated absence of support, while `INSUFFICIENT_EVIDENCE` SHALL mean that a safe evaluation was not possible. `DIRECT` SHALL never be selected solely from shared keywords or a score. `STRONG_ADJACENT`, `PARTIAL`, `NO_MATCH`, and `INSUFFICIENT_EVIDENCE` SHALL expose their `gap_id` and limitation/missing-support explanation; `DIRECT` need not create a gap.
+When multiple possible classifications conflict, the application SHALL choose the least-claim-safe classification justified by the table; unresolved ambiguity SHALL be `INSUFFICIENT_EVIDENCE`. `NO_MATCH` SHALL mean evaluated absence of support, while `INSUFFICIENT_EVIDENCE` SHALL mean that a safe evaluation was not possible. `DIRECT` SHALL never be selected solely from shared keywords or a score. `STRONG_ADJACENT`, `PARTIAL`, `NO_MATCH`, and `INSUFFICIENT_EVIDENCE` SHALL expose their `gap_id` and limitation/missing-support explanation; `DIRECT` need not create a gap. A classification outside the five declared values SHALL be invalid and SHALL fail closed without coercion.
 
 #### Scenario: Complete responsibility and outcome support exists
 
@@ -82,13 +137,18 @@ When multiple possible classifications conflict, the application SHALL choose th
 - **WHEN** the source or Evidence is incomplete or materially ambiguous
 - **THEN** the system records `INSUFFICIENT_EVIDENCE` with the reason and does not convert missing information into a capability gap
 
+#### Scenario: An unknown taxonomy value is returned
+
+- **WHEN** a matching result contains a classification outside `DIRECT`, `STRONG_ADJACENT`, `PARTIAL`, `NO_MATCH`, or `INSUFFICIENT_EVIDENCE`
+- **THEN** the result fails validation, is not persisted as usable intelligence, and cannot become a current or confirmed output
+
 ### Requirement: Every material output has end-to-end traceability
 
 The system SHALL preserve the following navigable provenance chain for every material intelligence output:
 
 `jd_source_ref → jd_revision_id → requirement_id → match_id or gap_id → evidence_revision_id(s) when present → positioning_claim_id → positioning_version_id`.
 
-Each `positioning_claim_id` SHALL reference at least one `requirement_id`. A claim supported by a match SHALL reference at least one `match_id` and the fixed Evidence revisions used by that match. A claim about a gap SHALL reference a `gap_id` and SHALL be framed as a limitation, unknown, or follow-up need; it SHALL NOT be represented as a verified career fact. A whole-document provenance pointer without per-claim edges is insufficient.
+Each `positioning_claim_id` SHALL reference at least one `requirement_id`. A claim supported by a match SHALL reference at least one `match_id` and the fixed eligible `CONFIRMED` Evidence revisions used by that match. A claim about a gap SHALL reference a `gap_id` and SHALL be framed as a limitation, unknown, or follow-up need; it SHALL NOT be represented as a verified career fact. A whole-document provenance pointer without per-claim edges is insufficient.
 
 #### Scenario: A supported positioning claim is reviewed
 
@@ -107,7 +167,7 @@ Each `positioning_claim_id` SHALL reference at least one `requirement_id`. A cla
 
 ### Requirement: Positioning is versioned, reviewable, and explicitly confirmed
 
-Each positioning candidate SHALL contain `positioning_version_id`, `opportunity_id`, `jd_revision_id`, `analysis_id`, `evidence_snapshot_id`, an explicit state, and one or more claims with `positioning_claim_id` and the required provenance edges. Candidate states SHALL be `DRAFT`, `CANDIDATE`, `CONFIRMED`, `STALE`, or `REJECTED`; only an explicit user confirmation may make a version `CONFIRMED` and current. A new candidate or factual-support change SHALL create a new version and preserve prior versions.
+Each positioning candidate SHALL contain `positioning_version_id`, `opportunity_id`, `jd_revision_id`, `analysis_id`, `evidence_snapshot_id`, an explicit state, and one or more claims with `positioning_claim_id` and the required provenance edges to eligible confirmed Evidence where support is claimed. Candidate states SHALL be `DRAFT`, `CANDIDATE`, `CONFIRMED`, `STALE`, or `REJECTED`; only an explicit user confirmation may make a version `CONFIRMED` and current. A new candidate or factual-support change SHALL create a new version and preserve prior versions. A positioning lifecycle state outside this finite vocabulary SHALL fail validation and SHALL not be coerced into a valid state.
 
 When its JD or Evidence input generation is no longer current, a positioning version SHALL become `STALE` for current use while remaining readable as history. A stale version SHALL not become the current version for a newer input. Positioning SHALL remain a strategy candidate and SHALL not be a CV, cover letter, Story Bank, Interview Pack, or submission artifact.
 
@@ -126,11 +186,49 @@ When its JD or Evidence input generation is no longer current, a positioning ver
 - **WHEN** a newer JD revision is selected for the same Opportunity
 - **THEN** linked analysis, matches/gaps, and positioning candidates are marked `STALE` for current use; historical versions remain readable and no Evidence revision is silently changed
 
+#### Scenario: An unknown positioning state is returned
+
+- **WHEN** a positioning candidate contains a lifecycle state outside `DRAFT`, `CANDIDATE`, `CONFIRMED`, `STALE`, or `REJECTED`
+- **THEN** the candidate fails validation, is not published as current, and is not silently mapped to another state
+
+### Requirement: Match & Gaps and Positioning expose deterministic orthogonal UI state
+
+Match & Gaps and Positioning SHALL each expose a content/surface state and an independent execution state. Content/surface state SHALL be one of `SELECTION_REQUIRED`, `LOADING`, `EMPTY`, `AVAILABLE_CURRENT`, `STALE`, or `FAILED_UNAVAILABLE`. Execution state SHALL be one of `IDLE`, `RUNNING`, `COMPLETED`, `CANCELLED`, `FAILED`, or `STALE_RESULT_REJECTED`. The two values SHALL not be collapsed into one status or inferred from display text.
+
+The mapping SHALL be deterministic: no selected context is `SELECTION_REQUIRED` + `IDLE`; selected-context loading maps to `LOADING` + `IDLE`, while an active operation maps to `RUNNING` with the current content state (or `LOADING` when no result exists); a valid context with no result maps to `EMPTY` + `IDLE`; a validated result for the current generation maps to `AVAILABLE_CURRENT` + `COMPLETED`; changed JD/Evidence input makes an old result `STALE` + `IDLE`; failure or unavailable with no current result maps to `FAILED_UNAVAILABLE` + `FAILED`; failure with a current result preserves `AVAILABLE_CURRENT` + `FAILED`; cancellation preserves the current result as `AVAILABLE_CURRENT` + `CANCELLED` or remains `EMPTY` + `CANCELLED`; a late older-generation result maps to `STALE_RESULT_REJECTED` and cannot overwrite the prior current result. `EMPTY` SHALL remain distinct from `FAILED_UNAVAILABLE`.
+
+Any content or execution state outside the declared vocabularies SHALL fail closed without coercion. Cancellation, failure, and stale-result rejection SHALL preserve the prior current result; an input generation change SHALL mark that result stale while retaining it as history.
+
+#### Scenario: A selected context has no result
+
+- **WHEN** a valid Opportunity/JD context is selected and no validated intelligence result exists
+- **THEN** both surfaces project `EMPTY` + `IDLE` and do not represent the empty state as unavailable
+
+#### Scenario: A current result is displayed
+
+- **WHEN** a validated result matches the selected JD/Evidence input generation
+- **THEN** the corresponding surface projects `AVAILABLE_CURRENT` + `COMPLETED`
+
+#### Scenario: Failure or cancellation occurs with prior work
+
+- **WHEN** an execution fails or is cancelled after a current result exists
+- **THEN** the prior result remains visible as current while execution projects `FAILED` or `CANCELLED`, and no partial result replaces it
+
+#### Scenario: A late stale result arrives
+
+- **WHEN** a result from an older input generation arrives after a newer context or result is current
+- **THEN** execution projects `STALE_RESULT_REJECTED`, the older result cannot overwrite current content, and the prior valid content or empty state is preserved
+
+#### Scenario: An unknown UI state is returned
+
+- **WHEN** either surface receives a content or execution state outside its declared finite vocabulary
+- **THEN** the state fails closed and is not coerced to a different visible state
+
 ### Requirement: Execution uses a provider-independent structured contract
 
 Each bounded execution request SHALL contain `execution_id`, stable `idempotency_key`, `operation_type`, `schema_version`, `opportunity_id`, `jd_revision_id`, `evidence_snapshot_id`, ordered `evidence_revision_ids`, input generation, `requested_at`, `disclosure_classification`, and an allowlisted payload containing only the selected JD and relevant Evidence material. Supported `operation_type` values SHALL be explicitly finite for this slice, such as `ANALYZE_REQUIREMENTS`, `CLASSIFY_MATCHES`, or `DRAFT_POSITIONING`; a general-purpose prompt/router contract is not implied.
 
-Each executor response SHALL contain `execution_id`, `idempotency_key`, `schema_version`, `result_status`, `validation_status`, a structured payload only when valid and complete, and a safe error object when unsuccessful. `result_status` SHALL distinguish `SUCCEEDED`, `FAILED`, `CANCELLED`, `TIMED_OUT`, `UNAVAILABLE`, `PROVIDER_FAILURE`, `MALFORMED`, `SCHEMA_INVALID`, `PARTIAL`, `STALE`, and `DUPLICATE`; `validation_status` SHALL be `VALID`, `INVALID`, or `NOT_RUN`; error data SHALL include a finite classification and `retryable` flag without private full text by default.
+Each executor response SHALL contain `execution_id`, `idempotency_key`, `schema_version`, `result_status`, `validation_status`, a structured payload only when valid and complete, and a safe error object when unsuccessful. `result_status` SHALL distinguish `SUCCEEDED`, `FAILED`, `CANCELLED`, `TIMED_OUT`, `UNAVAILABLE`, `PROVIDER_FAILURE`, `MALFORMED`, `SCHEMA_INVALID`, `PARTIAL`, `STALE`, and `DUPLICATE`; `validation_status` SHALL be `VALID`, `INVALID`, or `NOT_RUN`; error data SHALL include a finite classification and `retryable` flag without private full text by default. An unknown result or validation status SHALL fail closed, SHALL not be coerced, and SHALL not publish a candidate or overwrite a current result.
 
 #### Scenario: An executor receives a request
 
@@ -146,6 +244,11 @@ Each executor response SHALL contain `execution_id`, `idempotency_key`, `schema_
 
 - **WHEN** the response cannot be parsed or fails required structure/provenance validation
 - **THEN** the application records `MALFORMED` or `SCHEMA_INVALID` with safe validation evidence, stores no candidate payload as usable intelligence, and leaves the prior valid state unchanged
+
+#### Scenario: An executor returns an unknown status
+
+- **WHEN** a response contains a result or validation status outside the declared finite vocabularies
+- **THEN** the response is rejected as invalid, no candidate is published, and the prior valid state remains unchanged
 
 ### Requirement: Execution is bounded, cancellable, idempotent, and stale-safe
 

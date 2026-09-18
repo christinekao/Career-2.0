@@ -2,7 +2,7 @@
 
 查閱日期：2026-09-12。T01 已完成 current-source capability audit；只查官方文件、官方 repository/release 與 package registry，沒有安裝、執行或複製程式。頁面內容會變動；implementation kickoff 仍須重新確認 release、授權檔、相依套件與 runtime compatibility。
 
-2026-09-12 scope freeze 註記：沿用本次參考研究，不重新擴張產品研究。Career 2.0 independent Git baseline 與 T02 Phase 0 architecture 已完成；本文件的 T01 section 記錄 M1 capability boundary。Engineering Memory 僅為 optional cross-project reference，沒有 bootstrap/binding 或 runtime dependency。這段是 T01 selection snapshot；後續 M1 Foundation 已安裝並驗證選定 runtime，read-only acceptance PASS，OpenSpec change 已封存至 `openspec/changes/archive/2026-09-16-establish-m1-foundation/`；named `m1-opportunity-evidence-substrate` 的最小 substrate 已完成 implementation/validation、read-only acceptance 與 archive，保留於 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`。AI/renderer 等 M2 能力仍按需另選，不能阻擋 M1；M2 planning repair 尚待完成。
+2026-09-12 scope freeze 註記：沿用本次參考研究，不重新擴張產品研究。Career 2.0 independent Git baseline 與 T02 Phase 0 architecture 已完成；本文件的 T01 section 記錄 M1 capability boundary。Engineering Memory 僅為 optional cross-project reference，沒有 bootstrap/binding 或 runtime dependency。這段是 T01 selection snapshot；後續 M1 Foundation 已安裝並驗證選定 runtime，read-only acceptance PASS，OpenSpec change 已封存至 `openspec/changes/archive/2026-09-16-establish-m1-foundation/`；named `m1-opportunity-evidence-substrate` 的最小 substrate 已完成 implementation/validation、read-only acceptance 與 archive，保留於 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`。AI/renderer 等 M2 能力仍按需另選，不能阻擋 M1；M2 planning 已 accepted 並完成 baseline close-out，provider/model 仍是 implementation gate。
 
 ## 1. 目前可確認的參考
 

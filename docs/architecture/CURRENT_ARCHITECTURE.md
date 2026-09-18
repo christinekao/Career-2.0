@@ -1,6 +1,6 @@
 # 架構現況與提案邊界
 
-現況更新：2026-09-18。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`），M1 close-out commit `911a10392a1d2073145c7859feb001d0dd38fe2c` 已推送至 `origin/main`；M1 Foundation hardening implementation 依核准 threat model 完成。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過；active same-user .career2 replacement at lock-open 未防護，依使用者決策列為 M1 non-goal/future hardening，fixture skipped，不宣稱 race 已修復。Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已通過：fresh PID 79150 載入實際 Career 2.0 main entry、建立並顯示 BrowserWindow、renderer/preload/IPC 正常、synthetic private root 的 store READY version 1 與 identity/root binding 正常；完成 8 秒 visible observation，使用者實際看到視窗，並以 code 0 / signal null clean exit。Build、OpenSpec strict 通過。Read-only M1 acceptance review PASS；`establish-m1-foundation` 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Career Evidence/revision runtime、additive migration、migration ownership checkpoints、degraded foundation fallback、true cross-process restart/read-back、domain schema readiness validation、public error-boundary sanitization、main writer 與 narrow IPC/preload 已實作，36 PASS / 1 SKIPPED / 0 FAIL 的 domain validation 與獨立 read-only acceptance 通過，已 archive 至 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`；完整 M1 product-domain features 仍未實作或 accepted。`m2-intelligence-vertical-slice` 目前為 active planning，planning repair 尚待完成，尚未開始 implementation。
+現況更新：2026-09-18。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`），M1 close-out commit `911a10392a1d2073145c7859feb001d0dd38fe2c` 已推送至 `origin/main`；M1 Foundation hardening implementation 依核准 threat model 完成。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過；active same-user .career2 replacement at lock-open 未防護，依使用者決策列為 M1 non-goal/future hardening，fixture skipped，不宣稱 race 已修復。Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已通過：fresh PID 79150 載入實際 Career 2.0 main entry、建立並顯示 BrowserWindow、renderer/preload/IPC 正常、synthetic private root 的 store READY version 1 與 identity/root binding 正常；完成 8 秒 visible observation，使用者實際看到視窗，並以 code 0 / signal null clean exit。Build、OpenSpec strict 通過。Read-only M1 acceptance review PASS；`establish-m1-foundation` 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Career Evidence/revision runtime、additive migration、migration ownership checkpoints、degraded foundation fallback、true cross-process restart/read-back、domain schema readiness validation、public error-boundary sanitization、main writer 與 narrow IPC/preload 已實作，36 PASS / 1 SKIPPED / 0 FAIL 的 domain validation 與獨立 read-only acceptance 通過，已 archive 至 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`；完整 M1 product-domain features 仍未實作或 accepted。`m2-intelligence-vertical-slice` 目前為 active planning，planning 已 accepted，baseline close-out 完成，READY_TO_START_M2_IMPLEMENTATION = YES，implementation 尚未開始。
 
 ## 已觀察現況
 
@@ -13,13 +13,13 @@
 | 本案程式發現 | M1 Foundation source 與 tests 已存在；code graph 未建立，本案圖譜 generation = Insufficient evidence |
 | 現有 runtime / local data | 本案目錄內不存在；外部是否已有相關資料為 Insufficient evidence，沒有廣泛掃描私人目錄 |
 | 外部 repo / remote / release | 獨立 local Git repo 已建立；`origin` = `https://github.com/christinekao/Career-2.0.git`，`main` tracks `origin/main`；尚無 release 或 worktree；Engineering Memory 不屬本案依賴 |
-| 本輪狀態 | Foundation hardening 已依核准 threat model 完成並通過 read-only M1 acceptance review；static path confinement、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過。Active same-user path swap 是未防護的 future-hardening non-goal。H5 fresh Electron GUI acceptance 已完成並具 automated + human-observed evidence；OpenSpec M1 changes 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 runtime、validation 與獨立 acceptance 已完成並 archive；`m2-intelligence-vertical-slice` 仍為 planning repair，implementation blocked。完整 product-domain runtime schema/workflow 尚未被宣稱完成 |
+| 本輪狀態 | Foundation hardening 已依核准 threat model 完成並通過 read-only M1 acceptance review；static path confinement、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過。Active same-user path swap 是未防護的 future-hardening non-goal。H5 fresh Electron GUI acceptance 已完成並具 automated + human-observed evidence；OpenSpec M1 changes 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 runtime、validation 與獨立 acceptance 已完成並 archive；`m2-intelligence-vertical-slice` planning 已 accepted，baseline close-out 完成，implementation 尚未開始且 READY_TO_START_M2_IMPLEMENTATION = YES。完整 product-domain runtime schema/workflow 尚未被宣稱完成 |
 
 ## 決策權與文件權威
 
 最新使用者 scope review 為 R1 凍結依據：Career Evidence + Opportunity 同為 M1 foundation；其上是 M1 Workspace，再 M2 Intelligence；完整 MVP = M1 + M2。五條 frozen invariant 見 [產品規劃](../PRODUCT_PLAN.md)。附件是需求來源，OSS 文件只是參考。新案與 canonical repo 身份是 Career 2.0，不延伸舊 Job-Ops；正式對外品牌尚未決定。
 
-交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → complete M1 Foundation hardening within approved threat model → H5 real Electron startup validation → read-only M1 review → OpenSpec sync/archive → commit/push → named M1 product-domain prerequisite (`m1-opportunity-evidence-substrate`) implementation → prerequisite read-only acceptance → prerequisite OpenSpec archive/commit/push → M2 planning repair/read-only review → M1 Workspace/product vertical slices → M2 Intelligence implementation。`m2-intelligence-vertical-slice` 目前只完成 planning；其 prerequisite gate 已滿足，但 planning review 尚未完成，因此尚不可 apply。現有架構契約與保留圖記錄產品規則及技術邊界；Foundation 與 minimum substrate code 不代表完整產品功能已上線。
+交付順序（本案目前執行基線）：獨立 Git baseline → T02 Phase 0 architecture → T01 M1 capability selection → complete M1 Foundation hardening within approved threat model → H5 real Electron startup validation → read-only M1 review → OpenSpec sync/archive → commit/push → named M1 product-domain prerequisite (`m1-opportunity-evidence-substrate`) implementation → prerequisite read-only acceptance → prerequisite OpenSpec archive/commit/push → M2 planning acceptance/baseline close-out → M1 Workspace/product vertical slices → M2 Intelligence implementation。`m2-intelligence-vertical-slice` planning 已 accepted；其 prerequisite gate 已滿足，READY_TO_START_M2_IMPLEMENTATION = YES，但 implementation 尚未開始。現有架構契約與保留圖記錄產品規則及技術邊界；Foundation 與 minimum substrate code 不代表完整產品功能已上線。
 
 OpenSpec 的責任是 project-local 的個別 change lifecycle：proposal、delta specs、design、tasks、apply、verify、sync/archive。它不取代 PLAN、PRODUCT_PLAN、CURRENT_ARCHITECTURE 或 OSS_REUSE 的 authority；`openspec/specs/` 的 baseline 是 approved target behavior，不是已實作證明。T01/T02 只保留為 PRE_OPENSPEC_BASELINE_HISTORY，不重建為 OpenSpec historical changes。Engineering Memory 仍是 optional cross-project learning，沒有 runtime、binding 或同步關係。
 
@@ -28,12 +28,12 @@ Change sizing rule：`ONE_OPENSPEC_CHANGE = ONE_COHERENT_BEHAVIORAL_OR_ENGINEERI
 ## Active M2 planning boundary
 
 `m2-intelligence-vertical-slice` 是目前的 M2 intelligence planning change，
-狀態為 `PLANNING_ACTIVE / IMPLEMENTATION_NOT_STARTED`。它只規劃單一
+狀態為 `PLANNING_ACCEPTED / IMPLEMENTATION_NOT_STARTED / READY_TO_START`。它只規劃單一
 Opportunity、單一 JD revision、固定 Evidence snapshot、可追溯的
 requirements/matches/gaps、versioned positioning，以及 bounded candidate
  execution；不代表完整 product-domain runtime 已存在。
 
-M2 的硬性前置是 [`m1-opportunity-evidence-substrate`](../../openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/)，其最小 implementation、validation 與獨立 acceptance 已完成並 archive；該 gate 已滿足。M2 詳細的 identity、taxonomy、traceability、execution、migration 與 backup authority contract 由 active change 的 proposal/spec/design/tasks 擁有；目前仍須先完成 M2 planning repair 與 read-only planning review，本文件只保留 current boundary 與 dependency，不複製整份 M2 spec。
+M2 的硬性前置是 [`m1-opportunity-evidence-substrate`](../../openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/)，其最小 implementation、validation 與獨立 acceptance 已完成並 archive；該 gate 已滿足。M2 詳細的 identity、taxonomy、traceability、execution、migration 與 backup authority contract 由 active change 的 proposal/spec/design/tasks 擁有；M2 planning review 已 PASS，baseline close-out 已完成，implementation 尚未開始但 READY_TO_START_M2_IMPLEMENTATION = YES；本文件只保留 current boundary 與 dependency，不複製整份 M2 spec。
 
 ## Active derived diagrams
 
@@ -99,13 +99,13 @@ tests and the repair regressions extend the current run to 36 passed, 1 skipped,
 0 failed, including migration ownership-loss rollback, degraded-foundation
 fallback, true cross-process restart/read-back, domain-schema readiness checks,
 and public status plus direct domain-IPC error-boundary checks; renderer build passes. The
-named prerequisite implementation is complete for its
-minimum substrate, but its separate read-only acceptance is pending.
+named prerequisite implementation and its separate read-only acceptance are
+complete for its minimum substrate; the change is archived.
 The fresh bounded prerequisite Electron probe on 2026-09-17 used PID 54523
 and passed the real main/renderer/preload/IPC path, synthetic Opportunity/JD
 and Evidence/revision operations, metadata/root binding, visible observation,
-and clean ownership reacquisition; the formal prerequisite acceptance remains
-pending. A separate direct Electron probe also passed the public domain-error
+and clean ownership reacquisition; the formal prerequisite acceptance passed.
+A separate direct Electron probe also passed the public domain-error
 transport through `ipcRenderer.invoke -> preload -> renderer`, including
 private-path, SQLite/config, stack, unknown-code, known-classification, and
 success controls; successful payloads remained unchanged.
@@ -120,7 +120,7 @@ BrowserWindow configuration from the checked-in main source and proves preload
 execution through the actual narrow IPC handshake; production window behavior
 and dependencies were unchanged. Read-only M1
 acceptance review passed and the OpenSpec change is archived. The prerequisite
-change remains active until its separate acceptance review.
+change remains archived after its separate acceptance review.
 
 ## T02 M1 executable architecture contracts
 

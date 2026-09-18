@@ -1,6 +1,6 @@
 ## Context
 
-The accepted M1 foundation supplies the local Electron shell, configured private root, single canonical writer, and replaceable persistence boundary. The approved `opportunity-workspace` and `career-evidence` specifications remain broader target contracts; the minimum Opportunity/JD and Evidence/revision substrate is implemented and accepted in the archived `m1-opportunity-evidence-substrate` change. That accepted prerequisite supplies the inputs required here; the full product-domain records and workflows are not assumed.
+The accepted M1 foundation supplies the local Electron shell, configured private root, single canonical writer, and replaceable persistence boundary. The approved `opportunity-workspace` and `career-evidence` specifications remain broader target contracts; the minimum Opportunity/JD and Evidence/revision substrate is implemented and accepted in the archived `m1-opportunity-evidence-substrate` change. That accepted prerequisite supplies the inputs required here; the full product-domain records and workflows are not assumed. Because the prerequisite does not provide a complete Opportunity workspace UI, this change owns only the minimal selection/context surface needed to enter this slice.
 
 This change remains the first M2 intelligence vertical slice: one selected Opportunity, one JD revision, a fixed Evidence snapshot, explainable matching/gaps, and reviewable positioning. It does not implement or assume the rest of the M1 Workspace or the complete M2 MVP.
 
@@ -13,10 +13,13 @@ This change remains the first M2 intelligence vertical slice: one selected Oppor
 - Define one provider-independent bounded execution contract with explicit malformed, partial, timeout, cancellation, retry, duplicate, and stale behavior.
 - Add intelligence persistence additively while retaining the M1 foundation version, writer, private-root, and persistence boundaries.
 - Preserve the existing backup/restore authority as the only owner of complete-store backup and restore expectations.
+- Own a minimal Opportunity selection/context surface that binds one existing Opportunity and JD revision to Match & Gaps and Positioning.
 
 **Non-Goals:**
 
 - Creating the Opportunity/Evidence substrate in this change; that is `m1-opportunity-evidence-substrate`.
+- A candidate persona or candidate concerns system; those are future analysis concerns, not outputs or acceptance criteria of this slice.
+- A complete Opportunity workspace, general Opportunity CRUD, Opportunity management product, or general navigation redesign. This change owns only the minimal selection/context surface needed for its vertical slice.
 - CV generation, cover letter, Story Bank, Interview Pack, cross-artifact review/repair/recheck, PDF, submission, or the full two-JD MVP.
 - Selecting or installing a provider, model, CLI, package, renderer, dependency, or version during planning.
 - A generic provider adapter, router, agent framework, server, sync layer, background worker, or second writer.
@@ -29,18 +32,34 @@ This change remains the first M2 intelligence vertical slice: one selected Oppor
 `m1-opportunity-evidence-substrate` is implemented, separately accepted, and
 archived. Its gate proves stable Opportunity/JD revision and confirmed
 Evidence/revision operations, restart/read-back, private-root isolation, and
-fail-closed behavior. M2 implementation remains blocked until this planning
-change's remaining blockers are repaired and its read-only planning review
-passes.
+fail-closed behavior. The planning repair and read-only planning review for
+this change are complete; the baseline is accepted, implementation remains
+not started, and the change is ready for the later apply workflow.
 
-### 2. Stable identity uses immutable inputs, not display text
+### 2. M2 owns the minimal Opportunity selection/context surface
+
+The slice provides the smallest entry surface needed to operate on accepted
+substrate data. It allows the user to select one existing `opportunity_id`,
+shows the selected Opportunity's available identity/display context together
+with one selected `jd_revision_id` and its source/provenance metadata, and
+provides explicit entry points to Match & Gaps and Positioning for that same
+context. The surface uses the accepted substrate domain operations and does
+not create a second Opportunity authority.
+
+Selection/context acceptance is bounded: a missing Opportunity or unavailable
+JD revision leaves the slice unavailable and prevents analysis; it does not
+silently create a record, select a fallback, or imply that the full Opportunity
+workspace exists. Synthetic acceptance fixtures may create substrate records
+through the accepted domain operation before exercising the surface.
+
+### 3. Stable identity uses immutable inputs, not display text
 
 The substrate owns opaque `opportunity_id`, `jd_revision_id`, `evidence_id`,
 and `evidence_revision_id` values. M2 uses the following persisted identities:
 
 - `analysis_id = analysis:{opportunity_id}:{jd_revision_id}:{analysis_generation}`;
 - `evidence_snapshot_id` is the digest of the contract version plus the
-  ordered fixed `evidence_revision_ids`;
+  ordered eligible confirmed `evidence_revision_ids`;
 - `requirement_id` is the digest of contract version, `jd_revision_id`,
   deterministic source anchor, normalized content, and requirement type;
 - `match_id` is the digest of matching contract version, `jd_revision_id`,
@@ -59,7 +78,7 @@ JD revision and Evidence snapshot with the same contract version must reuse
 the same requirement/match/gap identities; a new JD or Evidence generation
 must not reuse the old current result. Display text alone is never an identity.
 
-### 3. Requirement and uncertainty shape is structured
+### 4. Requirement and uncertainty shape is structured
 
 Each requirement carries the fields and finite values defined by the
 intelligence spec: `RESPONSIBILITY`, `OUTCOME`, `SKILL`, `CONSTRAINT`,
@@ -70,10 +89,11 @@ maximum) with a declared basis, not a claim-truth probability. Source anchors
 must be deterministic and resolve to captured JD text or an explicit
 unavailable state. A missing source anchor blocks readiness.
 
-### 4. Matching is a decision table, not a score
+### 5. Matching is a decision table, not a score
 
 The implementation evaluates requirement dimensions, responsibility/outcome
-boundaries, available Evidence completeness, and explicit missing portions.
+boundaries, eligible confirmed Evidence completeness, and explicit missing
+portions.
 It applies the fixed taxonomy in the spec: complete support is `DIRECT`, a
 transferable but different context is `STRONG_ADJACENT`, a supported subset is
 `PARTIAL`, evaluated absence is `NO_MATCH`, and an unsafe/incomplete
@@ -84,16 +104,16 @@ Ambiguity takes the least-claim-safe route to `INSUFFICIENT_EVIDENCE`.
 Many-to-many Evidence references are allowed, but there is no arbitrary
 aggregate score or keyword-only promotion.
 
-### 5. Traceability is stored as per-claim edges
+### 6. Traceability is stored as per-claim edges
 
 The domain stores source references and immutable IDs on each node, not only on
 the final positioning document. Every positioning claim points to at least
-one requirement. A supported claim points through `match_id` to fixed
-Evidence revisions; a gap-based claim points to `gap_id` and remains an
+one requirement. A supported claim points through `match_id` to fixed eligible
+confirmed Evidence revisions; a gap-based claim points to `gap_id` and remains an
 explicit limitation or unknown. A candidate with a missing edge fails
 validation and cannot be confirmed.
 
-### 6. Positioning is a versioned candidate state machine
+### 7. Positioning is a versioned candidate state machine
 
 Positioning versions use `DRAFT`, `CANDIDATE`, `CONFIRMED`, `STALE`, and
 `REJECTED`. The main process alone can move a validated candidate to
@@ -102,7 +122,7 @@ analysis, matches/gaps, and positioning versions `STALE` for current use,
 without mutating their historical records. Positioning remains a strategy
 layer; no downstream document is created by this change.
 
-### 7. One bounded provider-independent execution contract
+### 8. One bounded provider-independent execution contract
 
 The request contains `execution_id`, stable `idempotency_key`, finite
 `operation_type`, `schema_version`, Opportunity/JD/Evidence snapshot
@@ -127,7 +147,7 @@ selected existing capability must be recorded with its actual input/output,
 privacy, limits, failure, cost, and exit behavior; no dependency or version
 change is permitted by this planning change.
 
-### 8. Additive migration and existing backup authority
+### 9. Additive migration and existing backup authority
 
 `FOUNDATION_STORE_VERSION = 1` remains unchanged. Intelligence owns a separate
 monotonic `INTELLIGENCE_SCHEMA_VERSION`, beginning at `0` absent and migrating
@@ -147,7 +167,7 @@ M2 acceptance is blocked until that coverage is demonstrated or the authority
 explicitly records the supported M2 scope. No second backup format, writer, or
 framework is planned.
 
-### 9. Boundary and privacy remain M1-shaped
+### 10. Boundary and privacy remain M1-shaped
 
 The main process owns reads requiring private data, execution authorization,
 candidate validation, confirmation, migration, and persistence. Preload adds
@@ -157,18 +177,74 @@ path, or direct filesystem write capability. External execution requires
 explicit data-scope/party disclosure and excludes unrelated fields by
 default; private full text is not written to repository logs.
 
-### 10. Deterministic validation order
+### 11. Deterministic validation order
 
-Validation starts with synthetic Opportunity/JD and Evidence substrate data,
-then exercises identity/provenance, every taxonomy branch, positioning
+Validation starts with the M2-owned minimal Opportunity selection/context
+surface over synthetic Opportunity/JD and eligible confirmed Evidence substrate
+data (plus explicit ineligible/draft fixtures), then
+exercises identity/provenance, every taxonomy branch, positioning
 versioning, malformed/partial/failure lifecycle, stale/duplicate handling,
 migration failure, backup coverage, restart/read-back, privacy, renderer
 capabilities, and one bounded Opportunity acceptance. The prerequisite gate
 must pass first; M2 acceptance cannot use invented or personal data.
 
+### 12. Only eligible confirmed Evidence revisions enter intelligence
+
+The accepted substrate can hold both draft and confirmed Evidence revisions,
+but M2 intelligence input is narrower. Building an `evidence_snapshot_id`
+requires resolving every referenced `evidence_revision_id` and verifying that
+each revision is `CONFIRMED`, belongs to the expected Evidence identity, has
+valid provenance, and is otherwise eligible under the accepted substrate
+contract. A revision's existence is not sufficient eligibility.
+
+If a requested revision is draft, unconfirmed, missing, incompatible, or
+otherwise ineligible, snapshot creation fails closed. The revision is not sent
+to an executor and no match, gap, or positioning candidate is published from
+that input. If no eligible confirmed Evidence is available, the bounded
+operation reports `UNAVAILABLE`; a matching evaluation that proceeds without
+usable Evidence may only produce `INSUFFICIENT_EVIDENCE`, never a supported
+match or confirmed claim. A successfully created snapshot retains its exact
+confirmed revision identities and generation even when later revisions exist;
+later input changes make dependent work stale rather than rewriting history.
+
+### 13. Content and execution state are projected separately
+
+Match & Gaps and Positioning each expose two orthogonal state values. The
+content/surface state is one of `SELECTION_REQUIRED`, `LOADING`, `EMPTY`,
+`AVAILABLE_CURRENT`, `STALE`, or `FAILED_UNAVAILABLE`. The execution state is
+one of `IDLE`, `RUNNING`, `COMPLETED`, `CANCELLED`, `FAILED`, or
+`STALE_RESULT_REJECTED`.
+
+The projection is deterministic:
+
+- No selected Opportunity/JD context maps to `SELECTION_REQUIRED` + `IDLE`.
+- Loading the selected context maps to `LOADING` + `IDLE`; an execution in
+  progress maps to `RUNNING` with the current content state, or `LOADING`
+  when no result exists.
+- A valid selected context with no result maps to `EMPTY` + `IDLE`.
+- A validated result bound to the current JD/Evidence generation maps to
+  `AVAILABLE_CURRENT` + `COMPLETED`.
+- A changed JD/Evidence generation makes the prior result `STALE` + `IDLE`;
+  it remains readable history and is not current.
+- A failed or unavailable execution maps to `FAILED_UNAVAILABLE` + `FAILED`
+  when no current result exists. If a current result already exists, the
+  content remains `AVAILABLE_CURRENT` and the execution state becomes
+  `FAILED`.
+- Cancellation never replaces an existing current result: it preserves
+  `AVAILABLE_CURRENT` + `CANCELLED`, or produces `EMPTY` + `CANCELLED` when
+  no prior result exists.
+- A late completion from an older generation maps to
+  `STALE_RESULT_REJECTED` and cannot overwrite the prior current result. The
+  content remains the prior valid state, or `EMPTY` when no prior result exists.
+
+The same mapping applies independently to Match & Gaps and Positioning. Any
+taxonomy, lifecycle, content, or execution state outside the declared finite
+vocabularies is invalid; it fails closed without coercion or fallback to a
+different valid state.
+
 ## Risks / Trade-offs
 
-- **[M2 planning remains incomplete]** → Keep M2 apply blocked until the remaining planning blockers are repaired and the read-only planning review passes, even though the substrate prerequisite is accepted.
+- **[M2 planning accepted; implementation not started]** → Keep implementation separate from this baseline close-out; begin it only through the later apply workflow, even though the substrate prerequisite and planning gate are satisfied.
 - **[A model changes wording between retries]** → Stable identities use immutable source/input anchors; payload changes create a new result/version or fail validation rather than silently relinking history.
 - **[A partial or late response contaminates state]** → Persist only terminal execution metadata for non-success responses; compare generation and idempotency before publication.
 - **[M2 records are omitted from backup]** → Keep backup ownership in the existing capability and block M2 acceptance until complete-store coverage is demonstrated.
@@ -180,6 +256,6 @@ must pass first; M2 acceptance cannot use invented or personal data.
 1. Use the separately accepted and archived `m1-opportunity-evidence-substrate` prerequisite.
 2. Record the approved existing executor capability without installing or changing dependencies.
 3. Apply the additive intelligence schema migration from foundation version 1; validate transaction, marker, constraints, rollback, and M1 read-back.
-4. Implement synthetic input loading, structured execution, deterministic matching, traceability, positioning review/confirmation, and narrow UI boundary in dependency order.
+4. Implement the M2-owned minimal Opportunity selection/context surface, then synthetic input loading, structured execution, deterministic matching, traceability, positioning review/confirmation, and the narrow UI boundary in dependency order.
 5. Exercise failure, cancellation, timeout, retry, duplicate, stale, privacy, backup-coverage, restart, and repository-isolation acceptance.
 6. If migration or validation fails, leave M1 available, report M2 unavailable, and do not publish partial intelligence state.

@@ -34,8 +34,9 @@ archived. Its gate proves stable Opportunity/JD revision and confirmed
 Evidence/revision operations, restart/read-back, private-root isolation, and
 fail-closed behavior. The planning repair and read-only planning review for
 this change are complete; the baseline is accepted, Batch 1 implementation is
-complete for its 10 scoped tasks, and Batch 1 acceptance repair/re-review is
-pending. Later apply work remains gated on that acceptance.
+complete for its 10 scoped tasks, and the independent read-only Batch 1
+acceptance has passed. Batch 1 is accepted; later apply work remains separate
+and Batch 2 has not started in this run.
 
 ### 2. M2 owns the minimal Opportunity selection/context surface
 
@@ -250,7 +251,7 @@ different valid state.
 
 ## Risks / Trade-offs
 
-- **[M2 planning accepted; Batch 1 acceptance pending]** → Keep Batch 1 acceptance repair/re-review separate from later apply work; begin later batches only after Batch 1 acceptance, even though the substrate prerequisite and planning gate are satisfied.
+- **[M2 planning accepted; Batch 1 accepted]** → Keep later batches separate from the accepted Batch 1 boundary; Batch 2 has not started in this run, even though the substrate prerequisite and planning gate are satisfied.
 - **[A model changes wording between retries]** → Stable identities use immutable source/input anchors; payload changes create a new result/version or fail validation rather than silently relinking history.
 - **[A partial or late response contaminates state]** → Persist only terminal execution metadata for non-success responses; compare generation and idempotency before publication.
 - **[M2 records are omitted from backup]** → Keep backup ownership in the existing capability and block M2 acceptance until complete-store coverage is demonstrated.

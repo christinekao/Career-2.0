@@ -1,6 +1,6 @@
 ## Why
 
-M1 now provides the accepted local foundation and the canonical Career Evidence / Opportunity target contracts. The minimum Opportunity/JD and Evidence/revision substrate is implemented and separately accepted in the archived `m1-opportunity-evidence-substrate` change; the full product-domain workflows are not implemented. This change defines the smallest user-visible M2 intelligence slice, with planning acceptance and baseline close-out complete while implementation remains not started, so one selected job description can become a defensible, evidence-linked direction without weakening M1's truth, privacy, or ownership rules.
+M1 now provides the accepted local foundation and the canonical Career Evidence / Opportunity target contracts. The minimum Opportunity/JD and Evidence/revision substrate is implemented and separately accepted in the archived `m1-opportunity-evidence-substrate` change; the full product-domain workflows are not implemented. This change defines the smallest user-visible M2 intelligence slice, with planning acceptance and baseline close-out complete, Batch 1 implementation started and complete for its 10 scoped tasks, and Batch 1 acceptance repair/re-review pending, so one selected job description can become a defensible, evidence-linked direction without weakening M1's truth, privacy, or ownership rules.
 
 ## What Changes
 
@@ -35,9 +35,11 @@ now separately accepted and archived. Its accepted evidence provides the
 minimum stable Opportunity/JD revision and confirmed Career Evidence/revision
 operations, restart/read-back, private-root isolation, and fail-closed
 migration behavior described in its planning artifacts. The planning review for
-this change has passed and the baseline is accepted; M2 implementation remains
-not started and SHALL begin only through the later apply workflow. The accepted
-prerequisite does not imply that full Opportunity or Evidence workflows exist.
+this change has passed and the baseline is accepted; Batch 1 implementation is
+complete for its 10 scoped tasks, its acceptance repair/re-review is pending,
+and later Batch 2+ implementation SHALL begin only after Batch 1 acceptance.
+The accepted prerequisite does not imply that full Opportunity or Evidence
+workflows exist.
 
 ## Impact
 

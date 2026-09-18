@@ -16,6 +16,7 @@ const {
   canonicalSerialize,
   classifyMatch,
   validateMatchRecord,
+  validateMatchableRequirement,
   validatePositioningClaimEdges,
   validatePositioningVersion,
   validateRequirement,
@@ -995,7 +996,7 @@ function assertIntelligenceDataIntegrity(database) {
         missing_dimensions: parseRecordJson(row.missing_dimensions_json, 'match missing dimensions'),
         explanation: row.explanation,
         boundary: row.boundary,
-      }, snapshot);
+      }, snapshot, requirement);
     } catch (error) {
       invalidData(`Intelligence match is invalid: ${error.message}`);
     }
@@ -1593,7 +1594,7 @@ function intelligenceSourceResolvesToJd(sourceRef, content) {
     const end = sourceRef.end === undefined ? sourceRef.start : sourceRef.end;
     return sourceRef.start >= 0 && end >= sourceRef.start && end <= content.length;
   }
-  return true;
+  return false;
 }
 
 function createIntelligenceOperations(database, privateRoot, ownership, options, isClosed) {
@@ -1902,6 +1903,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       }
       const requirement = readRequirement(requestedRequirementId);
       if (!requirement) throw new FoundationPersistenceError('INTELLIGENCE_REQUIREMENT_NOT_FOUND', 'Match requirement does not exist.');
+      validateMatchableRequirement(requirement);
       if (suppliedRequirement && canonicalSerialize(validateRequirement(suppliedRequirement)) !== canonicalSerialize(requirement)) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement does not match the canonical persisted requirement.');
       }
@@ -1922,7 +1924,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
         jd_revision_id: requirement.jd_revision_id,
         evidence_snapshot_id: snapshot.evidence_snapshot_id,
         input_generation: snapshot.input_generation,
-      }, snapshot);
+      }, snapshot, requirement);
       const existing = database.prepare('SELECT * FROM intelligence_matches WHERE match_id = ?').get(match.match_id);
       if (existing) {
         const existingMatch = readMatch(match.match_id);
@@ -1970,6 +1972,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     const row = database.prepare('SELECT * FROM intelligence_matches WHERE match_id = ?').get(matchId);
     if (!row) return null;
     const snapshot = readSnapshot(row.evidence_snapshot_id);
+    const requirement = readRequirement(row.requirement_id);
     return validateMatchRecord({
       match_id: row.match_id,
       gap_id: row.gap_id,
@@ -1983,7 +1986,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       missing_dimensions: intelligenceStoredJson(row.missing_dimensions_json, 'missing_dimensions_json'),
       explanation: row.explanation,
       ...(row.boundary ? { boundary: row.boundary } : {}),
-    }, snapshot);
+    }, snapshot, requirement);
   }
 
   function readMatchOrGap(relationId) {

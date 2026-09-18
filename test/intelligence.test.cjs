@@ -148,6 +148,9 @@ test('requirement finite vocabularies and uncertainty fail closed', () => {
     assert.throws(() => requirement({ uncertainty: { signal_type: 'EXTRACTION_UNCERTAINTY', value, basis: 'RULE' } }), { code: 'INTELLIGENCE_UNCERTAINTY_INVALID' });
   }
   assert.throws(() => requirement({ sourceRef: 'display text only' }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
+  for (const sourceRef of ['section:does-not-resolve', 'paragraph:does-not-resolve', 'char:1-2', 'anchor:does-not-resolve']) {
+    assert.throws(() => requirement({ sourceRef }), { code: 'INTELLIGENCE_SOURCE_ANCHOR_INVALID' });
+  }
   assert.throws(() => requirement({ requirementType: 'OTHER' }), { code: 'INTELLIGENCE_UNKNOWN_STATE' });
   assert.throws(() => requirement({ priority: 'OTHER' }), { code: 'INTELLIGENCE_UNKNOWN_STATE' });
   assert.throws(() => requirement({ explicitness: 'OTHER' }), { code: 'INTELLIGENCE_UNKNOWN_STATE' });
@@ -221,15 +224,71 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   const keywordOnly = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: { score: 1, keywords: ['build', 'systems'] },
+    evaluation: { score: 1, keywords: ['build', 'systems'], explanation: 'The evaluator did not receive structured support facts.' },
   });
   assert.equal(keywordOnly.classification, 'INSUFFICIENT_EVIDENCE');
   const incompleteSupport = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
-    evaluation: { completeSupport: true, evidenceComplete: false, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id] },
+    evaluation: { completeSupport: true, evidenceComplete: false, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id], explanation: 'The Evidence snapshot is incomplete for a safe decision.' },
   });
   assert.equal(incompleteSupport.classification, 'INSUFFICIENT_EVIDENCE');
+  for (const priority of ['MEDIUM', 'LOW', 'UNKNOWN']) {
+    assert.throws(() => intelligence.classifyMatch({
+      requirement: requirement({ priority }),
+      evidenceSnapshot: fixed,
+      evaluation: {
+        completeSupport: true,
+        evidenceComplete: true,
+        supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
+        explanation: 'Complete support is unavailable for a non-high-priority requirement.',
+      },
+    }), { code: 'INTELLIGENCE_REQUIREMENT_NOT_READY' });
+  }
+  const conflict = intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: {
+      adjacentSupport: true,
+      partialSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id],
+      boundary: 'The context differs from the requirement.',
+      missingDimensions: ['scale'],
+      explanation: 'Conflicting relation facts prevent a safe classification.',
+    },
+  });
+  assert.equal(conflict.classification, 'INSUFFICIENT_EVIDENCE');
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { completeSupport: true, evidenceComplete: true, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id] },
+  }), { code: 'INTELLIGENCE_INVALID_INPUT' });
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { completeSupport: true, evidenceComplete: true, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id], explanation: 'Evaluation remains limited by available evidence.' },
+  }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { adjacentSupport: true, evidenceComplete: true, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id], explanation: 'Transferable behavior is supported.' },
+  }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { partialSupport: true, evidenceComplete: true, supportedEvidenceRevisionIds: [revisions[0].evidence_revision_id], missingDimensions: ['scale'] },
+  }), { code: 'INTELLIGENCE_INVALID_INPUT' });
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { evidenceComplete: true },
+  }), { code: 'INTELLIGENCE_INVALID_INPUT' });
+  assert.throws(() => intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: { ambiguous: true, evidenceComplete: false },
+  }), { code: 'INTELLIGENCE_INVALID_INPUT' });
   assert.throws(() => intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
@@ -264,6 +323,7 @@ test('traceability and positioning claim edges reject unsupported or gap-as-fact
   const trace = intelligence.validateTraceability({ jdSourceRef: req.source_ref, jdRevisionId: req.jd_revision_id, requirement: req, match, snapshot: fixed });
   assert.equal(trace.input_generation, 'generation-1');
   assert.ok(trace.provenance_edges.some((edge) => edge.edge_type === 'MATCH_TO_CONFIRMED_EVIDENCE'));
+  assert.throws(() => intelligence.validateTraceability({ jdSourceRef: req.source_ref, jdRevisionId: 'jd-other', requirement: req, match, snapshot: fixed }), { code: 'INTELLIGENCE_PROVENANCE_INVALID' });
   const posId = intelligence.buildPositioningVersionId({ opportunityId: 'op-1', versionNumber: 1 });
   const claims = intelligence.validatePositioningClaimEdges({
     positioningVersionId: posId,
@@ -326,6 +386,20 @@ test('intelligence migration and domain operations preserve M1 state across rest
   const jd = store.opportunity.addJdRevision(opportunity.opportunityId, { content: 'Build reliable local systems.\nOperate reliable local systems.', sourceRef: 'paste://synthetic-jd', capturedAt: '2026-09-18T00:00:00Z' });
   const evidence = store.evidence.create({ factualContent: 'Built reliable local systems.', responsibilityBoundary: 'Owned system boundary.', outcome: 'Improved reliability.', provenance: { kind: 'synthetic', source: 'fixture' }, createdAt: '2026-09-18T00:00:00Z' });
   const confirmed = store.evidence.confirmRevision(evidence.evidenceId, evidence.revisions[0].evidenceRevisionId, '2026-09-18T00:01:00Z');
+  const requirementInput = {
+    analysisId: null,
+    jdRevisionId: jd.jdRevisionId,
+    sourceRef: 'jd:line:1',
+    normalizedContent: 'Build reliable local systems.',
+    requirementType: 'RESPONSIBILITY',
+    priority: 'HIGH',
+    explicitness: 'EXPLICIT',
+    extractionStatus: 'EXTRACTED',
+    uncertainty: { signal_type: 'EXTRACTION_UNCERTAINTY', value: 0, basis: 'RULE' },
+  };
+  assert.throws(() => store.intelligence.saveRequirement({ ...requirementInput, sourceRef: 'jd:line:3' }), { code: 'INTELLIGENCE_UNAVAILABLE' });
+  assert.throws(() => store.intelligence.saveRequirement({ ...requirementInput, sourceRef: 'jd:offset:999' }), { code: 'INTELLIGENCE_UNAVAILABLE' });
+  assert.throws(() => store.intelligence.saveRequirement({ ...requirementInput, jdRevisionId: 'missing-jd-revision' }), { code: 'JD_REVISION_INVALID' });
   assert.throws(() => store.intelligence.createInputGeneration({
     opportunityId: opportunity.opportunityId,
     jdRevisionId: jd.jdRevisionId,
@@ -381,15 +455,8 @@ test('intelligence migration and domain operations preserve M1 state across rest
     disclosureClassification: 'LOCAL_ONLY',
   }).analysis_id, input.analysis_id);
   const req = store.intelligence.saveRequirement({
+    ...requirementInput,
     analysisId: input.analysis_id,
-    jdRevisionId: jd.jdRevisionId,
-    sourceRef: 'jd:line:1',
-    normalizedContent: 'Build reliable local systems.',
-    requirementType: 'RESPONSIBILITY',
-    priority: 'HIGH',
-    explicitness: 'EXPLICIT',
-    extractionStatus: 'EXTRACTED',
-    uncertainty: { signal_type: 'EXTRACTION_UNCERTAINTY', value: 0, basis: 'RULE' },
   });
   const match = store.intelligence.classifyMatch({
     requirement: req,
@@ -420,7 +487,7 @@ test('intelligence migration and domain operations preserve M1 state across rest
     sourceRef: 'jd:line:2',
     normalizedContent: 'Operate reliable local systems.',
     requirementType: 'RESPONSIBILITY',
-    priority: 'MEDIUM',
+    priority: 'HIGH',
     explicitness: 'EXPLICIT',
     extractionStatus: 'EXTRACTED',
     uncertainty: { signal_type: 'EXTRACTION_UNCERTAINTY', value: 0, basis: 'RULE' },
@@ -453,6 +520,7 @@ test('intelligence migration and domain operations preserve M1 state across rest
   assert.equal(store.metadata.storeIdentity, storeIdentity);
   assert.equal(store.intelligence.getInputGeneration(input.analysis_id).evidence_revision_ids[0], confirmed.currentRevisionId);
   assert.equal(store.intelligence.getRequirement(req.requirement_id).requirement_id, req.requirement_id);
+  assert.equal(store.intelligence.getRequirement(req.requirement_id).source_ref, req.source_ref);
   assert.equal(store.intelligence.getMatch(match.match_id).classification, 'DIRECT');
   assert.equal(store.intelligence.getPositioningVersion(position.positioning_version_id).claims[0].positioning_claim_id, position.claims[0].positioning_claim_id);
 });

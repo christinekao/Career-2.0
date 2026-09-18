@@ -250,8 +250,8 @@ function normalizeUncertainty(value) {
 
 function validateRequirement(input = {}) {
   const contractVersion = input.contract_version ?? input.contractVersion ?? IDENTITY_CONTRACT_VERSION;
-  const jdRevisionId = requiredText(input.jd_revision_id ?? input.jdRevisionId, 'jd_revision_id');
-  const sourceRef = normalizeSourceRef(input.source_ref ?? input.sourceRef);
+  const jdRevisionId = requiredText(resolveAliasedField(input, 'jd_revision_id', 'jdRevisionId', 'jd_revision_id'), 'jd_revision_id');
+  const sourceRef = normalizeSourceRef(resolveAliasedField(input, 'source_ref', 'sourceRef', 'source_ref'));
   if (typeof sourceRef === 'object' && sourceRef.jd_revision_id !== undefined && sourceRef.jd_revision_id !== jdRevisionId) {
     invalid('INTELLIGENCE_SOURCE_ANCHOR_INVALID', 'source_ref.jd_revision_id must match jd_revision_id.');
   }
@@ -268,7 +268,7 @@ function validateRequirement(input = {}) {
     normalizedContent,
     requirementType,
   });
-  const suppliedId = input.requirement_id ?? input.requirementId;
+  const suppliedId = resolveAliasedField(input, 'requirement_id', 'requirementId', 'requirement_id');
   if (suppliedId !== undefined && suppliedId !== requirementId) {
     invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'requirement_id does not match immutable requirement inputs.');
   }
@@ -303,8 +303,8 @@ function evidenceRevisionObject(revision) {
   if (!revision || typeof revision !== 'object' || Array.isArray(revision)) {
     invalid('INTELLIGENCE_EVIDENCE_INELIGIBLE', 'Evidence revision is missing.');
   }
-  const evidenceRevisionId = requiredText(revision.evidence_revision_id ?? revision.evidenceRevisionId, 'evidence_revision_id');
-  const evidenceId = requiredText(revision.evidence_id ?? revision.evidenceId, 'evidence_id');
+  const evidenceRevisionId = requiredText(resolveAliasedField(revision, 'evidence_revision_id', 'evidenceRevisionId', 'evidence_revision_id'), 'evidence_revision_id');
+  const evidenceId = requiredText(resolveAliasedField(revision, 'evidence_id', 'evidenceId', 'evidence_id'), 'evidence_id');
   const confirmationState = revision.confirmation_state ?? revision.confirmationState;
   if (confirmationState !== 'CONFIRMED') {
     invalid('INTELLIGENCE_EVIDENCE_INELIGIBLE', `Evidence revision ${evidenceRevisionId} is not CONFIRMED.`);
@@ -336,8 +336,8 @@ function parseJson(value, fieldName) {
 }
 
 function buildEvidenceSnapshot(input = {}) {
-  const ids = orderedIds(input.evidence_revision_ids ?? input.evidenceRevisionIds, 'evidence_revision_ids');
-  const revisions = asArray(input.evidence_revisions ?? input.evidenceRevisions, 'evidence_revisions');
+  const ids = orderedIds(resolveAliasedField(input, 'evidence_revision_ids', 'evidenceRevisionIds', 'evidence_revision_ids'), 'evidence_revision_ids');
+  const revisions = asArray(resolveAliasedField(input, 'evidence_revisions', 'evidenceRevisions', 'evidence_revisions'), 'evidence_revisions');
   const byId = new Map();
   revisions.forEach((revision) => {
     const normalized = evidenceRevisionObject(revision);
@@ -351,12 +351,12 @@ function buildEvidenceSnapshot(input = {}) {
     if (!revision) invalid('INTELLIGENCE_EVIDENCE_REVISION_MISSING', `Evidence revision ${id} is missing.`);
     return revision;
   });
-  const expectedEvidenceId = input.expected_evidence_id ?? input.expectedEvidenceId;
+  const expectedEvidenceId = resolveAliasedField(input, 'expected_evidence_id', 'expectedEvidenceId', 'expected_evidence_id');
   const evidenceId = expectedEvidenceId ? requiredText(expectedEvidenceId, 'expected_evidence_id') : selected[0].evidence_id;
   if (selected.some((revision) => revision.evidence_id !== evidenceId)) {
     invalid('INTELLIGENCE_EVIDENCE_IDENTITY_MISMATCH', 'Selected Evidence revisions do not belong to one expected Evidence identity.');
   }
-  const rawGeneration = input.input_generation ?? input.inputGeneration;
+  const rawGeneration = resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation');
   if (rawGeneration === undefined || rawGeneration === null) invalid('INTELLIGENCE_INVALID_INPUT', 'input_generation must be provided.');
   const inputGeneration = requiredText(String(rawGeneration), 'input_generation');
   const contractVersion = input.contract_version ?? input.contractVersion ?? IDENTITY_CONTRACT_VERSION;
@@ -379,25 +379,25 @@ function validateSnapshot(snapshot) {
   if (!snapshot || typeof snapshot !== 'object') invalid('INTELLIGENCE_EVIDENCE_INELIGIBLE', 'Evidence snapshot is missing.');
   const rebuilt = buildEvidenceSnapshot({
     contractVersion: snapshot.contract_version ?? snapshot.contractVersion,
-    evidenceRevisionIds: snapshot.evidence_revision_ids ?? snapshot.evidenceRevisionIds,
-    evidenceRevisions: snapshot.evidence_revisions ?? snapshot.evidenceRevisions,
-    expectedEvidenceId: snapshot.evidence_id ?? snapshot.evidenceId,
-    inputGeneration: snapshot.input_generation ?? snapshot.inputGeneration,
+    evidenceRevisionIds: resolveAliasedField(snapshot, 'evidence_revision_ids', 'evidenceRevisionIds', 'evidence_revision_ids'),
+    evidenceRevisions: resolveAliasedField(snapshot, 'evidence_revisions', 'evidenceRevisions', 'evidence_revisions'),
+    expectedEvidenceId: resolveAliasedField(snapshot, 'evidence_id', 'evidenceId', 'evidence_id'),
+    inputGeneration: resolveAliasedField(snapshot, 'input_generation', 'inputGeneration', 'input_generation'),
   });
-  const suppliedId = snapshot.evidence_snapshot_id ?? snapshot.evidenceSnapshotId;
+  const suppliedId = resolveAliasedField(snapshot, 'evidence_snapshot_id', 'evidenceSnapshotId', 'evidence_snapshot_id');
   if (suppliedId !== rebuilt.evidence_snapshot_id) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'evidence_snapshot_id does not match immutable snapshot inputs.');
   return rebuilt;
 }
 
 function buildInputBundle(input = {}) {
-  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  const snapshot = validateSnapshot(resolveAliasedField(input, 'evidence_snapshot', 'evidenceSnapshot', 'evidence_snapshot'));
   const opportunityId = requiredText(input.opportunity_id ?? input.opportunityId, 'opportunity_id');
-  const jdRevisionId = requiredText(input.jd_revision_id ?? input.jdRevisionId, 'jd_revision_id');
+  const jdRevisionId = requiredText(resolveAliasedField(input, 'jd_revision_id', 'jdRevisionId', 'jd_revision_id'), 'jd_revision_id');
   const operationType = requireEnum(input.operation_type ?? input.operationType, OPERATION_TYPES, 'operation_type');
   const schemaVersion = input.schema_version ?? input.schemaVersion ?? 1;
   const executionId = requiredText(input.execution_id ?? input.executionId, 'execution_id');
   const idempotencyKey = requiredText(input.idempotency_key ?? input.idempotencyKey, 'idempotency_key');
-  const rawGeneration = input.input_generation ?? input.inputGeneration;
+  const rawGeneration = resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation');
   if (rawGeneration === undefined || rawGeneration === null) invalid('INTELLIGENCE_INVALID_INPUT', 'input_generation must be provided.');
   const inputGeneration = requiredText(String(rawGeneration), 'input_generation');
   const requestedAt = normalizeTimestamp(input.requested_at ?? input.requestedAt);
@@ -429,10 +429,28 @@ function hasOwn(value, key) {
   return Object.prototype.hasOwnProperty.call(value, key);
 }
 
-function readAliased(value, snake, camel) {
-  if (hasOwn(value, snake)) return value[snake];
-  if (camel && hasOwn(value, camel)) return value[camel];
+function aliasedValuesEqual(left, right) {
+  if (Object.is(left, right)) return true;
+  try {
+    return canonicalSerialize(left) === canonicalSerialize(right);
+  } catch {
+    return false;
+  }
+}
+
+function resolveAliasedField(value, snake, camel, fieldName = snake, conflictCode = 'INTELLIGENCE_IDENTITY_MISMATCH') {
+  const hasSnake = hasOwn(value, snake);
+  const hasCamel = camel ? hasOwn(value, camel) : false;
+  if (hasSnake && hasCamel && !aliasedValuesEqual(value[snake], value[camel])) {
+    invalid(conflictCode, `${fieldName} aliases do not agree.`);
+  }
+  if (hasSnake) return value[snake];
+  if (hasCamel) return value[camel];
   return undefined;
+}
+
+function readAliased(value, snake, camel) {
+  return resolveAliasedField(value, snake, camel, snake, 'INTELLIGENCE_MATCH_INVALID');
 }
 
 const EVALUATION_FIELDS = new Set([
@@ -459,13 +477,22 @@ const EVALUATION_FIELDS = new Set([
 ]);
 
 function normalizeEvaluation(input = {}) {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'matching input must be a structured object.');
+  }
   const hasNestedEvaluation = hasOwn(input, 'evaluation');
+  const topLevelFields = new Set(['requirement', 'evidence_snapshot', 'evidenceSnapshot', 'classification', 'evaluation']);
+  const allowedInputFields = hasNestedEvaluation
+    ? topLevelFields
+    : new Set([...EVALUATION_FIELDS, ...topLevelFields]);
+  if (Object.keys(input).some((key) => !allowedInputFields.has(key))) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'matching input contains an unsupported field.');
+  }
   const value = hasNestedEvaluation ? input.evaluation : input;
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     invalid('INTELLIGENCE_MATCH_INVALID', 'evaluation must be a structured decision record.');
   }
-  const topLevelFields = new Set(['requirement', 'evidence_snapshot', 'evidenceSnapshot', 'classification']);
-  const allowedFields = hasNestedEvaluation ? EVALUATION_FIELDS : new Set([...EVALUATION_FIELDS, ...topLevelFields]);
+  const allowedFields = hasNestedEvaluation ? EVALUATION_FIELDS : allowedInputFields;
   if (Object.keys(value).some((key) => !allowedFields.has(key))) {
     invalid('INTELLIGENCE_MATCH_INVALID', 'evaluation contains an unsupported decision field.');
   }
@@ -654,7 +681,7 @@ function validateClassificationExplanation(classification, value, rawDetails, mi
 
 function classifyMatch(input = {}) {
   const requirement = validateMatchableRequirement(input.requirement);
-  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  const snapshot = validateSnapshot(resolveAliasedField(input, 'evidence_snapshot', 'evidenceSnapshot', 'evidence_snapshot'));
   const evaluation = normalizeEvaluation(input);
   const evidenceIds = orderedIds(evaluation.supported_evidence_revision_ids, 'supported_evidence_revision_ids', { allowEmpty: true });
   const missingDimensions = orderedIds(evaluation.missing_dimensions, 'missing_dimensions', { allowEmpty: true });
@@ -739,25 +766,30 @@ function classifyMatch(input = {}) {
 
 function validateMatchRecord(input = {}, snapshot, requirement) {
   if (!MATCH_CLASSIFICATIONS.includes(input.classification)) invalid('INTELLIGENCE_UNKNOWN_TAXONOMY', 'Match classification is outside the accepted taxonomy.');
+  const matchId = resolveAliasedField(input, 'match_id', 'matchId', 'match_id');
+  const jdRevisionId = resolveAliasedField(input, 'jd_revision_id', 'jdRevisionId', 'jd_revision_id');
+  const requirementId = resolveAliasedField(input, 'requirement_id', 'requirementId', 'requirement_id');
+  const evidenceSnapshotId = resolveAliasedField(input, 'evidence_snapshot_id', 'evidenceSnapshotId', 'evidence_snapshot_id');
+  const suppliedInputGeneration = resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation');
+  const suppliedGapId = resolveAliasedField(input, 'gap_id', 'gapId', 'gap_id') ?? null;
   if (requirement !== undefined) {
     const matchableRequirement = validateMatchableRequirement(requirement);
-    if (matchableRequirement.requirement_id !== input.requirement_id) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement does not match the validated requirement.');
-    if (matchableRequirement.jd_revision_id !== input.jd_revision_id) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match JD revision does not match the validated requirement.');
+    if (matchableRequirement.requirement_id !== requirementId) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement does not match the validated requirement.');
+    if (matchableRequirement.jd_revision_id !== jdRevisionId) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match JD revision does not match the validated requirement.');
   }
   const fixedSnapshot = validateSnapshot(snapshot);
-  if (input.evidence_snapshot_id !== undefined && input.evidence_snapshot_id !== fixedSnapshot.evidence_snapshot_id) {
+  if (evidenceSnapshotId !== undefined && evidenceSnapshotId !== fixedSnapshot.evidence_snapshot_id) {
     invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match Evidence snapshot does not match the immutable snapshot.');
   }
-  const suppliedInputGeneration = input.input_generation ?? input.inputGeneration;
   if (suppliedInputGeneration !== undefined && suppliedInputGeneration !== fixedSnapshot.input_generation) {
     invalid('INTELLIGENCE_GENERATION_MISMATCH', 'Match input generation does not match the immutable snapshot.');
   }
   const expectedMatchId = buildMatchId({
-    jdRevisionId: input.jd_revision_id,
-    requirementId: input.requirement_id,
+    jdRevisionId,
+    requirementId,
     evidenceSnapshotId: fixedSnapshot.evidence_snapshot_id,
   });
-  if (input.match_id !== expectedMatchId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'match_id does not match immutable inputs.');
+  if (matchId !== expectedMatchId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'match_id does not match immutable inputs.');
   const evidenceIds = orderedIds(input.evidence_revision_ids, 'evidence_revision_ids', { allowEmpty: true });
   if (evidenceIds.some((id) => !fixedSnapshot.evidence_revision_ids.includes(id))) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match Evidence is outside its snapshot.');
   const missingDimensions = orderedIds(input.missing_dimensions ?? [], 'missing_dimensions', { allowEmpty: true });
@@ -779,7 +811,6 @@ function validateMatchRecord(input = {}, snapshot, requirement) {
   ) {
     invalid('INTELLIGENCE_MATCH_INVALID', 'INSUFFICIENT_EVIDENCE requires an unsafe or incomplete evaluation.');
   }
-  const suppliedGapId = input.gap_id ?? input.gapId ?? null;
   if (input.classification === 'DIRECT' && (evidenceIds.length === 0 || missingDimensions.length > 0 || suppliedGapId !== null)) {
     invalid('INTELLIGENCE_MATCH_INVALID', 'DIRECT requires confirmed Evidence references and no material limitation.');
   }
@@ -790,16 +821,16 @@ function validateMatchRecord(input = {}, snapshot, requirement) {
     invalid('INTELLIGENCE_MATCH_INVALID', 'PARTIAL requires confirmed Evidence references and missing dimensions.');
   }
   const gapId = input.classification === 'DIRECT' ? null : buildGapId({
-    jdRevisionId: input.jd_revision_id,
-    requirementId: input.requirement_id,
+    jdRevisionId,
+    requirementId,
     evidenceSnapshotId: fixedSnapshot.evidence_snapshot_id,
   });
   if (input.classification !== 'DIRECT' && suppliedGapId !== gapId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'gap_id does not match immutable inputs.');
   return freezeDeep({
-    match_id: input.match_id,
+    match_id: matchId,
     gap_id: gapId,
-    jd_revision_id: input.jd_revision_id,
-    requirement_id: input.requirement_id,
+    jd_revision_id: jdRevisionId,
+    requirement_id: requirementId,
     evidence_snapshot_id: fixedSnapshot.evidence_snapshot_id,
     input_generation: fixedSnapshot.input_generation,
     classification: input.classification,
@@ -877,15 +908,15 @@ function validateTraceability({ jdSourceRef, jdRevisionId, requirement, match, s
 }
 
 function validatePositioningClaimEdges(input = {}) {
-  const positioningVersionId = requiredText(input.positioning_version_id ?? input.positioningVersionId, 'positioning_version_id');
+  const positioningVersionId = requiredText(resolveAliasedField(input, 'positioning_version_id', 'positioningVersionId', 'positioning_version_id'), 'positioning_version_id');
   const requirements = new Map(asArray(input.requirements, 'requirements').map((item) => {
     const requirement = validateRequirement(item);
     return [requirement.requirement_id, requirement];
   }));
   const rawMatches = asArray(input.matches, 'matches', { allowEmpty: true });
-  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  const snapshot = validateSnapshot(resolveAliasedField(input, 'evidence_snapshot', 'evidenceSnapshot', 'evidence_snapshot'));
   const matches = new Map(rawMatches.map((item) => {
-    const requirement = requirements.get(item.requirement_id ?? item.requirementId);
+    const requirement = requirements.get(resolveAliasedField(item, 'requirement_id', 'requirementId', 'requirement_id'));
     const match = validateMatchRecord(item, snapshot, requirement);
     return [match.match_id, match];
   }));
@@ -893,10 +924,10 @@ function validatePositioningClaimEdges(input = {}) {
   const claims = asArray(input.claims, 'claims');
   const normalizedClaims = claims.map((claim, index) => {
     const ordinal = claim.ordinal ?? claim.claim_ordinal ?? index + 1;
-    const requirementId = requiredText(claim.requirement_id ?? claim.requirementId, 'requirement_id');
+    const requirementId = requiredText(resolveAliasedField(claim, 'requirement_id', 'requirementId', 'requirement_id'), 'requirement_id');
     if (!requirements.has(requirementId)) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim requirement edge is missing.');
-    const matchId = claim.match_id ?? claim.matchId ?? null;
-    const gapId = claim.gap_id ?? claim.gapId ?? null;
+    const matchId = resolveAliasedField(claim, 'match_id', 'matchId', 'match_id') ?? null;
+    const gapId = resolveAliasedField(claim, 'gap_id', 'gapId', 'gap_id') ?? null;
     if ((matchId && gapId) || (!matchId && !gapId)) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim must reference exactly one match or gap edge.');
     const source = matchId ? matches.get(matchId) : gaps.get(gapId);
     if (!source || source.requirement_id !== requirementId) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim edge does not resolve to its requirement.');
@@ -918,7 +949,7 @@ function validatePositioningClaimEdges(input = {}) {
     if (gapId && (!['LIMITATION', 'UNKNOWN', 'FOLLOW_UP'].includes(claimKind) || claim.verified === true)) invalid('INTELLIGENCE_GAP_CLAIM_INVALID', 'Gap-based claims must remain explicit limitations, unknowns, or follow-up needs.');
     if (matchId && (source.classification !== 'DIRECT' || claimKind !== 'SUPPORTED' || claim.verified === false)) invalid('INTELLIGENCE_MATCH_INVALID', 'Supported claims must resolve to a direct match with confirmed Evidence.');
     const claimId = buildPositioningClaimId({ positioningVersionId, ordinal });
-    const suppliedId = claim.positioning_claim_id ?? claim.positioningClaimId;
+    const suppliedId = resolveAliasedField(claim, 'positioning_claim_id', 'positioningClaimId', 'positioning_claim_id');
     if (suppliedId !== undefined && suppliedId !== claimId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'positioning_claim_id does not match version and ordinal.');
     return {
       positioning_claim_id: claimId,
@@ -939,25 +970,26 @@ function validatePositioningClaimEdges(input = {}) {
 
 function validatePositioningVersion(input = {}) {
   const opportunityId = requiredText(input.opportunity_id ?? input.opportunityId, 'opportunity_id');
-  const jdRevisionId = requiredText(input.jd_revision_id ?? input.jdRevisionId, 'jd_revision_id');
+  const jdRevisionId = requiredText(resolveAliasedField(input, 'jd_revision_id', 'jdRevisionId', 'jd_revision_id'), 'jd_revision_id');
   const analysisId = requiredText(input.analysis_id ?? input.analysisId, 'analysis_id');
-  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
-  if (input.evidence_snapshot_id !== undefined && input.evidence_snapshot_id !== snapshot.evidence_snapshot_id) {
+  const snapshot = validateSnapshot(resolveAliasedField(input, 'evidence_snapshot', 'evidenceSnapshot', 'evidence_snapshot'));
+  const evidenceSnapshotId = resolveAliasedField(input, 'evidence_snapshot_id', 'evidenceSnapshotId', 'evidence_snapshot_id');
+  if (evidenceSnapshotId !== undefined && evidenceSnapshotId !== snapshot.evidence_snapshot_id) {
     invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning Evidence snapshot does not match the immutable snapshot.');
   }
-  const suppliedInputGeneration = input.input_generation ?? input.inputGeneration;
+  const suppliedInputGeneration = resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation');
   if (suppliedInputGeneration !== undefined && suppliedInputGeneration !== snapshot.input_generation) {
     invalid('INTELLIGENCE_GENERATION_MISMATCH', 'Positioning input generation does not match the immutable snapshot.');
   }
   const state = requireEnum(input.state, POSITIONING_STATES, 'state');
   const versionNumber = assertFiniteInteger(input.version_number ?? input.versionNumber, 'version_number', { minimum: 1 });
   const positioningVersionId = buildPositioningVersionId({ opportunityId, versionNumber });
-  const suppliedId = input.positioning_version_id ?? input.positioningVersionId;
+  const suppliedId = resolveAliasedField(input, 'positioning_version_id', 'positioningVersionId', 'positioning_version_id');
   if (suppliedId !== undefined && suppliedId !== positioningVersionId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'positioning_version_id does not match opportunity and version number.');
   if (asArray(input.requirements, 'requirements').some((requirement) => (requirement.jd_revision_id ?? requirement.jdRevisionId) !== jdRevisionId)) {
     invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning requirements do not resolve to the selected JD revision.');
   }
-  if (asArray(input.matches, 'matches', { allowEmpty: true }).some((match) => match.jd_revision_id !== jdRevisionId)) {
+  if (asArray(input.matches, 'matches', { allowEmpty: true }).some((match) => resolveAliasedField(match, 'jd_revision_id', 'jdRevisionId', 'jd_revision_id') !== jdRevisionId)) {
     invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning relations do not resolve to the selected JD revision.');
   }
   const claims = validatePositioningClaimEdges({
@@ -1009,6 +1041,7 @@ module.exports = {
   digestCanonical,
   normalizeSourceRef,
   parseMatchExplanation,
+  resolveAliasedField,
   serializeMatchExplanation,
   validateMatchRecord,
   validateMatchableRequirement,

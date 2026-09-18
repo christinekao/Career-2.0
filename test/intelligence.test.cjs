@@ -250,6 +250,26 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
   assert.equal(direct.gap_id, null);
   assert.equal(direct.evidence_revision_ids.length, 2);
 
+  const validNestedInput = {
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: validEvaluation('DIRECT', { supportedEvidenceRevisionIds: revisions.map((item) => item.evidence_revision_id) }),
+  };
+  assert.equal(intelligence.classifyMatch(validNestedInput).classification, 'DIRECT');
+  for (const field of ['score', 'noMatch', 'no_match', 'decision_facts', 'confidenceScore', 'foo', 'unexpected_flag']) {
+    assert.throws(() => intelligence.classifyMatch({ ...validNestedInput, [field]: true }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  }
+  assert.throws(() => intelligence.classifyMatch({
+    ...validNestedInput,
+    evaluation: { ...validNestedInput.evaluation, unknownFact: true },
+  }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  assert.equal(intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    classification: 'DIRECT',
+    ...validNestedInput.evaluation,
+  }).classification, 'DIRECT');
+
   const adjacent = intelligence.classifyMatch({
     requirement: req,
     evidenceSnapshot: fixed,
@@ -405,6 +425,57 @@ test('matching decision table supports many-to-many Evidence and least-claim-saf
     ...direct,
     decision_facts: { ...direct.decision_facts, noMatch: false },
   }, fixed), { code: 'INTELLIGENCE_MATCH_INVALID' });
+});
+
+test('match provenance aliases reject conflicts before canonical identity checks', () => {
+  const fixed = snapshot();
+  const req = requirement();
+  const direct = intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: validEvaluation('DIRECT', { supportedEvidenceRevisionIds: fixed.evidence_revision_ids }),
+  });
+  const gap = intelligence.classifyMatch({
+    requirement: req,
+    evidenceSnapshot: fixed,
+    evaluation: validEvaluation('NO_MATCH'),
+  });
+  const identityPairs = [
+    ['match_id', 'matchId'],
+    ['requirement_id', 'requirementId'],
+    ['jd_revision_id', 'jdRevisionId'],
+    ['evidence_snapshot_id', 'evidenceSnapshotId'],
+  ];
+  const without = (record, field) => {
+    const { [field]: ignored, ...rest } = record;
+    return rest;
+  };
+
+  for (const [snake, camel] of identityPairs) {
+    assert.equal(
+      intelligence.validateMatchRecord({ ...without(direct, snake), [camel]: direct[snake] }, fixed, req).match_id,
+      direct.match_id,
+      `${camel} only should resolve to the canonical identity`,
+    );
+    assert.equal(
+      intelligence.validateMatchRecord({ ...direct, [camel]: direct[snake] }, fixed, req).match_id,
+      direct.match_id,
+      `${snake}/${camel} equal aliases should be accepted`,
+    );
+    assert.throws(() => intelligence.validateMatchRecord({ ...direct, [camel]: `wrong-${snake}` }, fixed, req), { code: 'INTELLIGENCE_IDENTITY_MISMATCH' });
+    assert.throws(() => intelligence.validateMatchRecord({ ...direct, [snake]: `wrong-${snake}`, [camel]: direct[snake] }, fixed, req), { code: 'INTELLIGENCE_IDENTITY_MISMATCH' });
+    assert.throws(() => intelligence.validateMatchRecord({ ...direct, [snake]: `wrong-${snake}`, [camel]: `wrong-${snake}` }, fixed, req));
+  }
+
+  assert.equal(
+    intelligence.validateMatchRecord({ ...without(gap, 'gap_id'), gapId: gap.gap_id }, fixed, req).gap_id,
+    gap.gap_id,
+  );
+  assert.equal(intelligence.validateMatchRecord({ ...gap, gapId: gap.gap_id }, fixed, req).gap_id, gap.gap_id);
+  assert.throws(() => intelligence.validateMatchRecord({ ...gap, gapId: 'wrong-gap' }, fixed, req), { code: 'INTELLIGENCE_IDENTITY_MISMATCH' });
+  assert.throws(() => intelligence.validateMatchRecord({ ...gap, gap_id: 'wrong-gap', gapId: gap.gap_id }, fixed, req), { code: 'INTELLIGENCE_IDENTITY_MISMATCH' });
+  assert.throws(() => intelligence.validateMatchRecord({ ...gap, gap_id: 'wrong-gap', gapId: 'wrong-gap' }, fixed, req));
+  assert.equal(intelligence.validateMatchRecord(without(direct, 'gap_id'), fixed, req).gap_id, null);
 });
 
 test('traceability and positioning claim edges reject unsupported or gap-as-fact claims', () => {
@@ -571,11 +642,24 @@ test('intelligence migration and domain operations preserve M1 state across rest
     analysisId: input.analysis_id,
     sourceRef: { locator: 'jd:offset:0-999', jd_revision_id: jd.jdRevisionId, start: 0, end: 999 },
   }), { code: 'INTELLIGENCE_UNAVAILABLE' });
-  const match = store.intelligence.classifyMatch({
+  const matchInput = {
     requirement: req,
     evidenceSnapshot: input.evidence_snapshot,
     evaluation: validEvaluation('DIRECT', { supportedEvidenceRevisionIds: [confirmed.currentRevisionId] }),
-  });
+  };
+  assert.throws(() => store.intelligence.classifyMatch({ ...matchInput, score: 1 }), { code: 'INTELLIGENCE_MATCH_INVALID' });
+  const match = store.intelligence.classifyMatch(matchInput);
+  assert.equal(store.intelligence.getMatch(match.match_id), null, 'rejected outer decision fields must not produce a persisted match');
+  for (const [alias, wrongValue] of [
+    ['matchId', 'wrong-match'],
+    ['requirementId', 'wrong-requirement'],
+    ['jdRevisionId', 'wrong-jd'],
+    ['evidenceSnapshotId', 'wrong-snapshot'],
+    ['gapId', 'wrong-gap'],
+  ]) {
+    assert.throws(() => store.intelligence.saveMatch({ ...match, [alias]: wrongValue }), { code: 'INTELLIGENCE_IDENTITY_MISMATCH' });
+    assert.equal(store.intelligence.getMatch(match.match_id), null, `${alias} conflict must not persist a partial match`);
+  }
   store.intelligence.saveMatch(match);
   assert.equal(store.intelligence.saveMatch(match).match_id, match.match_id);
   assert.throws(() => store.intelligence.saveMatch({ ...match, jd_revision_id: 'wrong-jd' }), { code: 'INTELLIGENCE_PROVENANCE_INVALID' });

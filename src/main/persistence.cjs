@@ -16,6 +16,7 @@ const {
   canonicalSerialize,
   classifyMatch,
   parseMatchExplanation,
+  resolveAliasedField,
   serializeMatchExplanation,
   validateMatchRecord,
   validateMatchableRequirement,
@@ -1647,26 +1648,26 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
   }
 
   function resolveEvidenceSnapshot(input = {}) {
-    const suppliedSnapshot = input.evidence_snapshot ?? input.evidenceSnapshot ?? input.snapshot;
+    const suppliedSnapshot = resolveAliasedField(input, 'evidence_snapshot', 'evidenceSnapshot', 'evidence_snapshot') ?? input.snapshot;
     if (suppliedSnapshot) {
-      const suppliedIds = suppliedSnapshot.evidence_revision_ids ?? suppliedSnapshot.evidenceRevisionIds;
+      const suppliedIds = resolveAliasedField(suppliedSnapshot, 'evidence_revision_ids', 'evidenceRevisionIds', 'evidence_revision_ids');
       if (Array.isArray(suppliedIds) && suppliedIds.length === 0) {
         throw new FoundationPersistenceError('INTELLIGENCE_EVIDENCE_UNAVAILABLE', 'No eligible confirmed Evidence revisions were selected.');
       }
       const supplied = validateSnapshot(suppliedSnapshot);
-      const requestedIds = input.evidence_revision_ids ?? input.evidenceRevisionIds;
+      const requestedIds = resolveAliasedField(input, 'evidence_revision_ids', 'evidenceRevisionIds', 'evidence_revision_ids');
       if (requestedIds !== undefined && canonicalSerialize(requestedIds) !== canonicalSerialize(supplied.evidence_revision_ids)) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence revision identities do not match the supplied snapshot.');
       }
-      const suppliedGeneration = input.input_generation ?? input.inputGeneration;
+      const suppliedGeneration = resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation');
       if (suppliedGeneration !== undefined && String(suppliedGeneration) !== supplied.input_generation) {
         throw new FoundationPersistenceError('INTELLIGENCE_GENERATION_MISMATCH', 'Input generation does not match the supplied Evidence snapshot.');
       }
-      const suppliedEvidenceId = input.evidence_id ?? input.evidenceId;
+      const suppliedEvidenceId = resolveAliasedField(input, 'evidence_id', 'evidenceId', 'evidence_id');
       if (suppliedEvidenceId !== undefined && suppliedEvidenceId !== supplied.evidence_id) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence identity does not match the supplied snapshot.');
       }
-      const suppliedSnapshotId = input.evidence_snapshot_id ?? input.evidenceSnapshotId;
+      const suppliedSnapshotId = resolveAliasedField(input, 'evidence_snapshot_id', 'evidenceSnapshotId', 'evidence_snapshot_id');
       if (suppliedSnapshotId !== undefined && suppliedSnapshotId !== supplied.evidence_snapshot_id) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence snapshot identity does not match the supplied snapshot.');
       }
@@ -1682,14 +1683,14 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       }
       return canonical;
     }
-    const ids = input.evidence_revision_ids ?? input.evidenceRevisionIds;
+    const ids = resolveAliasedField(input, 'evidence_revision_ids', 'evidenceRevisionIds', 'evidence_revision_ids');
     if (!Array.isArray(ids) || ids.length === 0) throw new FoundationPersistenceError('INTELLIGENCE_EVIDENCE_UNAVAILABLE', 'No eligible confirmed Evidence revisions were selected.');
     const revisions = ids.map((id) => readEvidenceRevision(id));
     return buildEvidenceSnapshot({
       evidenceRevisionIds: ids,
       evidenceRevisions: revisions,
-      expectedEvidenceId: input.evidence_id ?? input.evidenceId,
-      inputGeneration: input.input_generation ?? input.inputGeneration,
+      expectedEvidenceId: resolveAliasedField(input, 'evidence_id', 'evidenceId', 'evidence_id'),
+      inputGeneration: resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation'),
       contractVersion: input.contract_version ?? input.contractVersion,
     });
   }
@@ -1904,20 +1905,20 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     return run(() => {
       const snapshot = input.evidence_snapshot || input.evidenceSnapshot || input.snapshot
         ? resolveEvidenceSnapshot(input)
-        : readSnapshot(input.evidence_snapshot_id ?? input.evidenceSnapshotId);
+        : readSnapshot(resolveAliasedField(input, 'evidence_snapshot_id', 'evidenceSnapshotId', 'evidence_snapshot_id'));
       const suppliedRequirement = input.requirement?.requirement_id ? input.requirement : null;
-      const requestedRequirementId = input.requirement_id ?? input.requirementId ?? suppliedRequirement?.requirement_id;
+      const suppliedRequirementId = resolveAliasedField(input, 'requirement_id', 'requirementId', 'requirement_id');
+      const requestedRequirementId = suppliedRequirementId ?? suppliedRequirement?.requirement_id;
       if (suppliedRequirement && requestedRequirementId && suppliedRequirement.requirement_id !== requestedRequirementId) {
         throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Match requirement identity is inconsistent.');
       }
       const requirement = readRequirement(requestedRequirementId);
       if (!requirement) throw new FoundationPersistenceError('INTELLIGENCE_REQUIREMENT_NOT_FOUND', 'Match requirement does not exist.');
       validateMatchableRequirement(requirement);
-      const suppliedJdRevisionId = input.jd_revision_id ?? input.jdRevisionId;
+      const suppliedJdRevisionId = resolveAliasedField(input, 'jd_revision_id', 'jdRevisionId', 'jd_revision_id');
       if (suppliedJdRevisionId !== undefined && suppliedJdRevisionId !== requirement.jd_revision_id) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match JD revision identity does not match the canonical requirement.');
       }
-      const suppliedRequirementId = input.requirement_id ?? input.requirementId;
       if (suppliedRequirementId !== undefined && suppliedRequirementId !== requirement.requirement_id) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement identity does not match the canonical requirement.');
       }
@@ -1932,7 +1933,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
           throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match does not resolve to its immutable input generation.');
         }
       }
-      const suppliedInputGeneration = input.input_generation ?? input.inputGeneration;
+      const suppliedInputGeneration = resolveAliasedField(input, 'input_generation', 'inputGeneration', 'input_generation');
       if (suppliedInputGeneration !== undefined && String(suppliedInputGeneration) !== snapshot.input_generation) {
         throw new FoundationPersistenceError('INTELLIGENCE_GENERATION_MISMATCH', 'Match input generation does not match its Evidence snapshot.');
       }
@@ -2045,17 +2046,17 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     return run(() => {
       const snapshot = input.evidence_snapshot || input.evidenceSnapshot || input.snapshot
         ? resolveEvidenceSnapshot(input)
-        : readSnapshot(input.evidence_snapshot_id ?? input.evidenceSnapshotId);
+        : readSnapshot(resolveAliasedField(input, 'evidence_snapshot_id', 'evidenceSnapshotId', 'evidence_snapshot_id'));
       const opportunityId = input.opportunity_id ?? input.opportunityId;
       const versionNumber = input.version_number ?? input.versionNumber ?? (
         database.prepare('SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version FROM intelligence_positioning_versions WHERE opportunity_id = ?').get(opportunityId).next_version
       );
       const claims = input.claims || [];
-      const requirements = [...new Set(claims.map((claim) => claim.requirement_id ?? claim.requirementId))]
+      const requirements = [...new Set(claims.map((claim) => resolveAliasedField(claim, 'requirement_id', 'requirementId', 'requirement_id')))]
         .map((id) => readRequirement(id)).filter(Boolean);
       const matchIds = [...new Set(claims.flatMap((claim) => [
-        claim.match_id ?? claim.matchId,
-        claim.gap_id ?? claim.gapId,
+        resolveAliasedField(claim, 'match_id', 'matchId', 'match_id'),
+        resolveAliasedField(claim, 'gap_id', 'gapId', 'gap_id'),
       ]).filter(Boolean))];
       const matches = matchIds.map((id) => readMatchOrGap(id)).filter(Boolean);
       const version = validatePositioningVersion({

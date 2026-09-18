@@ -1,19 +1,19 @@
 ## 1. Preconditions and capability gate
 
-- [ ] 1.1 Record and use the accepted archived `m1-opportunity-evidence-substrate` evidence, including Opportunity/JD revision and confirmed Evidence/revision operations, restart/read-back, isolation, and fail-closed behavior; use this as the implementation precondition after the accepted planning baseline, without treating planning close-out as implementation progress.
+- [x] 1.1 Record and use the accepted archived `m1-opportunity-evidence-substrate` evidence, including Opportunity/JD revision and confirmed Evidence/revision operations, restart/read-back, isolation, and fail-closed behavior; use this as the implementation precondition after the accepted planning baseline, without treating planning close-out as implementation progress.
 - [ ] 1.2 Record one approved existing executor capability with its finite operation input/output, privacy/disclosure behavior, timeout/limit, failure/retry, cost, and exit behavior; do not install or change a dependency, provider, model, or version.
 
 ## 2. Input, identity, and requirement contract
 
-- [ ] 2.1 Define and test canonical serialization and deterministic identities for `analysis_id`, `evidence_snapshot_id`, `requirement_id`, `match_id`, `gap_id`, `positioning_version_id`, and `positioning_claim_id`; prove restart/retry stability and new-generation invalidation without display-text identity.
-- [ ] 2.2 Define and test the immutable input bundle with Opportunity, JD revision, ordered eligible `CONFIRMED` Evidence revisions, operation/schema version, execution identity, idempotency key, generation, timestamp, and disclosure classification; reject draft, unconfirmed, missing, incompatible, or otherwise ineligible Evidence before provider input is built.
-- [ ] 2.3 Define the requirement schema, finite requirement type/priority vocabulary, source anchor/provenance, explicit/inferred state, extraction status, and structured `EXTRACTION_UNCERTAINTY` signal with finite `0..1` value and declared basis.
+- [x] 2.1 Define and test canonical serialization and deterministic identities for `analysis_id`, `evidence_snapshot_id`, `requirement_id`, `match_id`, `gap_id`, `positioning_version_id`, and `positioning_claim_id`; prove restart/retry stability and new-generation invalidation without display-text identity.
+- [x] 2.2 Define and test the immutable input bundle with Opportunity, JD revision, ordered eligible `CONFIRMED` Evidence revisions, operation/schema version, execution identity, idempotency key, generation, timestamp, and disclosure classification; reject draft, unconfirmed, missing, incompatible, or otherwise ineligible Evidence before provider input is built.
+- [x] 2.3 Define the requirement schema, finite requirement type/priority vocabulary, source anchor/provenance, explicit/inferred state, extraction status, and structured `EXTRACTION_UNCERTAINTY` signal with finite `0..1` value and declared basis.
 
 ## 3. Matching, gaps, and traceability
 
-- [ ] 3.1 Define and implement the fixed `DIRECT`, `STRONG_ADJACENT`, `PARTIAL`, `NO_MATCH`, and `INSUFFICIENT_EVIDENCE` decision table, including evidence requirements, many-to-many relationships, ambiguity fallback, and no keyword/arbitrary-score promotion.
-- [ ] 3.2 Persist and validate per-node provenance edges from JD source to requirement to match/gap to fixed eligible `CONFIRMED` Evidence revisions; reject a candidate when any required identity, eligibility check, or edge is missing, and preserve the exact snapshot generation for later stale detection.
-- [ ] 3.3 Define positioning claim edges so every claim references at least one requirement, supported claims resolve through match plus Evidence, and gap-based claims remain explicit limitations/unknowns rather than verified facts.
+- [x] 3.1 Define and implement the fixed `DIRECT`, `STRONG_ADJACENT`, `PARTIAL`, `NO_MATCH`, and `INSUFFICIENT_EVIDENCE` decision table, including evidence requirements, many-to-many relationships, ambiguity fallback, and no keyword/arbitrary-score promotion.
+- [x] 3.2 Persist and validate per-node provenance edges from JD source to requirement to match/gap to fixed eligible `CONFIRMED` Evidence revisions; reject a candidate when any required identity, eligibility check, or edge is missing, and preserve the exact snapshot generation for later stale detection.
+- [x] 3.3 Define positioning claim edges so every claim references at least one requirement, supported claims resolve through match plus Evidence, and gap-based claims remain explicit limitations/unknowns rather than verified facts.
 - [ ] 3.4 Implement versioned positioning states (`DRAFT`, `CANDIDATE`, `CONFIRMED`, `STALE`, `REJECTED`), explicit confirmation/current pointer, immutable prior versions, stale invalidation after JD/Evidence generation changes, and fail-closed rejection of unknown lifecycle states.
 
 ## 4. Provider-independent execution contract
@@ -26,9 +26,9 @@
 
 ## 5. Persistence, migration, and backup authority
 
-- [ ] 5.1 Add the smallest additive migration from accepted M1 foundation state with `FOUNDATION_STORE_VERSION = 1` unchanged and `INTELLIGENCE_SCHEMA_VERSION` migrating from absent/zero to `1`; preserve foundation identity, root binding, metadata, and rows.
-- [ ] 5.2 Make migration transactional and fail closed: validate preconditions, marker, tables, constraints, and read-back before readiness; roll back or leave M2 unavailable on failure without reset, rebind, downgrade, or partial-ready state.
-- [ ] 5.3 Add application-owned domain operations for intelligence records without exposing a raw SQLite handle/path or creating a second writer/persistence authority.
+- [x] 5.1 Add the smallest additive migration from accepted M1 foundation state with `FOUNDATION_STORE_VERSION = 1` unchanged and `INTELLIGENCE_SCHEMA_VERSION` migrating from absent/zero to `1`; preserve foundation identity, root binding, metadata, and rows.
+- [x] 5.2 Make migration transactional and fail closed: validate preconditions, marker, tables, constraints, and read-back before readiness; roll back or leave M2 unavailable on failure without reset, rebind, downgrade, or partial-ready state.
+- [x] 5.3 Add application-owned domain operations for intelligence records without exposing a raw SQLite handle/path or creating a second writer/persistence authority.
 - [ ] 5.4 Extend the existing `backup-and-restore` authority's complete-store acceptance to include intelligence records, provenance references, and schema/version metadata in its existing manifest, validation, new-root, and no-silent-merge flow; do not add a second backup format or writer.
 
 ## 6. Application boundary and Opportunity experience

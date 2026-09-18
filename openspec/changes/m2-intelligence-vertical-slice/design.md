@@ -58,8 +58,10 @@ The substrate owns opaque `opportunity_id`, `jd_revision_id`, `evidence_id`,
 and `evidence_revision_id` values. M2 uses the following persisted identities:
 
 - `analysis_id = analysis:{opportunity_id}:{jd_revision_id}:{analysis_generation}`;
-- `evidence_snapshot_id` is the digest of the contract version plus the
-  ordered eligible confirmed `evidence_revision_ids`;
+- `evidence_snapshot_id` is the digest of the contract version, the ordered
+  eligible confirmed `evidence_revision_ids`, and the application-owned
+  `input_generation`; retaining the generation prevents a re-evaluation from
+  reusing a current relation identity when the current input generation changes;
 - `requirement_id` is the digest of contract version, `jd_revision_id`,
   deterministic source anchor, normalized content, and requirement type;
 - `match_id` is the digest of matching contract version, `jd_revision_id`,
@@ -102,7 +104,10 @@ deterministic `gap_id`; `NO_MATCH` means complete evaluation found no support,
 while `INSUFFICIENT_EVIDENCE` means the evaluation could not safely decide.
 Ambiguity takes the least-claim-safe route to `INSUFFICIENT_EVIDENCE`.
 Many-to-many Evidence references are allowed, but there is no arbitrary
-aggregate score or keyword-only promotion.
+aggregate score or keyword-only promotion. Persisted match rows also retain
+the normalized boolean decision facts used by this table; read-back rejects a
+classification that cannot be reproduced from those facts and immutable
+snapshot inputs.
 
 ### 6. Traceability is stored as per-claim edges
 

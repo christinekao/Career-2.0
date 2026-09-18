@@ -2,6 +2,28 @@ const crypto = require('node:crypto');
 const Database = require('better-sqlite3');
 
 const {
+  CLAIM_KINDS,
+  EXPLICITNESS,
+  EXTRACTION_STATUSES,
+  IntelligenceValidationError,
+  MATCH_CLASSIFICATIONS,
+  OPERATION_TYPES,
+  POSITIONING_STATES,
+  PRIORITIES,
+  REQUIREMENT_TYPES,
+  buildEvidenceSnapshot,
+  buildInputBundle,
+  canonicalSerialize,
+  classifyMatch,
+  validateMatchRecord,
+  validatePositioningClaimEdges,
+  validatePositioningVersion,
+  validateRequirement,
+  validateSnapshot,
+  validateTraceability,
+} = require('./intelligence.cjs');
+
+const {
   PrivateRootError,
   assertFoundationFileSafe,
   assertPrivateRootStable,
@@ -11,10 +33,12 @@ const {
 
 const FOUNDATION_STORE_VERSION = 1;
 const OPPORTUNITY_EVIDENCE_SCHEMA_VERSION = 1;
+const INTELLIGENCE_SCHEMA_VERSION = 1;
 const READY_STATE = 'READY';
 const INITIALIZING_STATE = 'INITIALIZING';
 const METADATA_TABLE = 'foundation_metadata';
 const OPPORTUNITY_EVIDENCE_SCHEMA_KEY = 'opportunity_evidence_schema_version';
+const INTELLIGENCE_SCHEMA_KEY = 'intelligence_schema_version';
 const SQLITE_STATE_FILES = [
   'foundation.sqlite',
   'foundation.sqlite-journal',
@@ -476,6 +500,666 @@ function assertOpportunityEvidenceSchema(database) {
   assertDomainCheckConstraints(database);
 }
 
+const INTELLIGENCE_SCHEMA_CONTRACT = {
+  tables: {
+    intelligence_evidence_snapshots: {
+      columns: [
+        { name: 'evidence_snapshot_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'evidence_id', type: 'TEXT', notNull: true },
+        { name: 'evidence_revision_ids_json', type: 'TEXT', notNull: true },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+        { name: 'contract_version', type: 'INTEGER', notNull: true },
+        { name: 'created_at', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [],
+      foreignKeys: [],
+      checks: [
+        'contract_version >= 1',
+      ],
+    },
+    intelligence_input_generations: {
+      columns: [
+        { name: 'analysis_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'opportunity_id', type: 'TEXT', notNull: true },
+        { name: 'jd_revision_id', type: 'TEXT', notNull: true },
+        { name: 'evidence_snapshot_id', type: 'TEXT', notNull: true },
+        { name: 'evidence_revision_ids_json', type: 'TEXT', notNull: true },
+        { name: 'operation_type', type: 'TEXT', notNull: true },
+        { name: 'schema_version', type: 'INTEGER', notNull: true },
+        { name: 'execution_id', type: 'TEXT', notNull: true },
+        { name: 'idempotency_key', type: 'TEXT', notNull: true },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+        { name: 'requested_at', type: 'TEXT', notNull: true },
+        { name: 'disclosure_classification', type: 'TEXT', notNull: true },
+        { name: 'created_at', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [['execution_id'], ['idempotency_key']],
+      foreignKeys: [{
+        columns: ['evidence_snapshot_id'],
+        referencedTable: 'intelligence_evidence_snapshots',
+        referencedColumns: ['evidence_snapshot_id'],
+        onDelete: 'RESTRICT',
+      }],
+      checks: [
+        "operation_type IN ('ANALYZE_REQUIREMENTS', 'CLASSIFY_MATCHES', 'DRAFT_POSITIONING')",
+        'schema_version >= 1',
+      ],
+    },
+    intelligence_requirements: {
+      columns: [
+        { name: 'requirement_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'analysis_id', type: 'TEXT', notNull: false },
+        { name: 'jd_revision_id', type: 'TEXT', notNull: true },
+        { name: 'source_ref_json', type: 'TEXT', notNull: true },
+        { name: 'normalized_content', type: 'TEXT', notNull: true },
+        { name: 'requirement_type', type: 'TEXT', notNull: true },
+        { name: 'priority', type: 'TEXT', notNull: true },
+        { name: 'explicitness', type: 'TEXT', notNull: true },
+        { name: 'uncertainty_json', type: 'TEXT', notNull: true },
+        { name: 'extraction_status', type: 'TEXT', notNull: true },
+        { name: 'contract_version', type: 'INTEGER', notNull: true },
+        { name: 'created_at', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [],
+      foreignKeys: [{
+        columns: ['analysis_id'],
+        referencedTable: 'intelligence_input_generations',
+        referencedColumns: ['analysis_id'],
+        onDelete: 'RESTRICT',
+      }],
+      checks: [
+        "requirement_type IN ('RESPONSIBILITY', 'OUTCOME', 'SKILL', 'CONSTRAINT', 'QUALIFICATION', 'PREFERENCE', 'UNKNOWN')",
+        "priority IN ('HIGH', 'MEDIUM', 'LOW', 'UNKNOWN')",
+        "explicitness IN ('EXPLICIT', 'INFERRED')",
+        "extraction_status IN ('EXTRACTED', 'INFERRED', 'UNAVAILABLE', 'REJECTED')",
+        'contract_version >= 1',
+      ],
+    },
+    intelligence_matches: {
+      columns: [
+        { name: 'match_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'gap_id', type: 'TEXT', notNull: false },
+        { name: 'jd_revision_id', type: 'TEXT', notNull: true },
+        { name: 'requirement_id', type: 'TEXT', notNull: true },
+        { name: 'evidence_snapshot_id', type: 'TEXT', notNull: true },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+        { name: 'classification', type: 'TEXT', notNull: true },
+        { name: 'decision_facts_json', type: 'TEXT', notNull: true },
+        { name: 'evidence_revision_ids_json', type: 'TEXT', notNull: true },
+        { name: 'missing_dimensions_json', type: 'TEXT', notNull: true },
+        { name: 'explanation', type: 'TEXT', notNull: true },
+        { name: 'boundary', type: 'TEXT', notNull: false },
+        { name: 'created_at', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [['requirement_id', 'evidence_snapshot_id'], ['gap_id']],
+      foreignKeys: [
+        {
+          columns: ['requirement_id'],
+          referencedTable: 'intelligence_requirements',
+          referencedColumns: ['requirement_id'],
+          onDelete: 'RESTRICT',
+        },
+        {
+          columns: ['evidence_snapshot_id'],
+          referencedTable: 'intelligence_evidence_snapshots',
+          referencedColumns: ['evidence_snapshot_id'],
+          onDelete: 'RESTRICT',
+        },
+      ],
+      checks: [
+        "classification IN ('DIRECT', 'STRONG_ADJACENT', 'PARTIAL', 'NO_MATCH', 'INSUFFICIENT_EVIDENCE')",
+        '((classification = \'DIRECT\' AND gap_id IS NULL) OR (classification <> \'DIRECT\' AND gap_id IS NOT NULL))',
+      ],
+    },
+    intelligence_positioning_versions: {
+      columns: [
+        { name: 'positioning_version_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'opportunity_id', type: 'TEXT', notNull: true },
+        { name: 'jd_revision_id', type: 'TEXT', notNull: true },
+        { name: 'analysis_id', type: 'TEXT', notNull: true },
+        { name: 'evidence_snapshot_id', type: 'TEXT', notNull: true },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+        { name: 'version_number', type: 'INTEGER', notNull: true },
+        { name: 'state', type: 'TEXT', notNull: true },
+        { name: 'claims_json', type: 'TEXT', notNull: true },
+        { name: 'created_at', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [['opportunity_id', 'version_number']],
+      foreignKeys: [
+        {
+          columns: ['analysis_id'],
+          referencedTable: 'intelligence_input_generations',
+          referencedColumns: ['analysis_id'],
+          onDelete: 'RESTRICT',
+        },
+        {
+          columns: ['evidence_snapshot_id'],
+          referencedTable: 'intelligence_evidence_snapshots',
+          referencedColumns: ['evidence_snapshot_id'],
+          onDelete: 'RESTRICT',
+        },
+      ],
+      checks: [
+        "state IN ('DRAFT', 'CANDIDATE', 'CONFIRMED', 'STALE', 'REJECTED')",
+        'version_number >= 1',
+      ],
+    },
+    intelligence_positioning_claims: {
+      columns: [
+        { name: 'positioning_claim_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'positioning_version_id', type: 'TEXT', notNull: true },
+        { name: 'ordinal', type: 'INTEGER', notNull: true },
+        { name: 'requirement_id', type: 'TEXT', notNull: true },
+        { name: 'match_id', type: 'TEXT', notNull: false },
+        { name: 'gap_id', type: 'TEXT', notNull: false },
+        { name: 'evidence_revision_ids_json', type: 'TEXT', notNull: true },
+        { name: 'claim_kind', type: 'TEXT', notNull: true },
+        { name: 'claim_text', type: 'TEXT', notNull: true },
+        { name: 'verified', type: 'INTEGER', notNull: true },
+      ],
+      uniqueConstraints: [['positioning_version_id', 'ordinal']],
+      foreignKeys: [
+        {
+          columns: ['positioning_version_id'],
+          referencedTable: 'intelligence_positioning_versions',
+          referencedColumns: ['positioning_version_id'],
+          onDelete: 'CASCADE',
+        },
+        {
+          columns: ['requirement_id'],
+          referencedTable: 'intelligence_requirements',
+          referencedColumns: ['requirement_id'],
+          onDelete: 'RESTRICT',
+        },
+        {
+          columns: ['match_id'],
+          referencedTable: 'intelligence_matches',
+          referencedColumns: ['match_id'],
+          onDelete: 'RESTRICT',
+        },
+        {
+          columns: ['gap_id'],
+          referencedTable: 'intelligence_matches',
+          referencedColumns: ['gap_id'],
+          onDelete: 'RESTRICT',
+        },
+      ],
+      checks: [
+        "claim_kind IN ('SUPPORTED', 'LIMITATION', 'UNKNOWN', 'FOLLOW_UP')",
+        '((match_id IS NOT NULL AND gap_id IS NULL) OR (match_id IS NULL AND gap_id IS NOT NULL))',
+        'verified IN (0, 1)',
+      ],
+    },
+    intelligence_provenance_edges: {
+      columns: [
+        { name: 'edge_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'edge_type', type: 'TEXT', notNull: true },
+        { name: 'jd_source_ref_json', type: 'TEXT', notNull: false },
+        { name: 'jd_revision_id', type: 'TEXT', notNull: false },
+        { name: 'requirement_id', type: 'TEXT', notNull: false },
+        { name: 'match_id', type: 'TEXT', notNull: false },
+        { name: 'gap_id', type: 'TEXT', notNull: false },
+        { name: 'evidence_revision_id', type: 'TEXT', notNull: false },
+        { name: 'positioning_claim_id', type: 'TEXT', notNull: false },
+        { name: 'positioning_version_id', type: 'TEXT', notNull: false },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [],
+      foreignKeys: [],
+      checks: [
+        "edge_type IN ('JD_SOURCE_TO_REVISION', 'REVISION_TO_REQUIREMENT', 'REQUIREMENT_TO_MATCH', 'REQUIREMENT_TO_GAP', 'MATCH_TO_CONFIRMED_EVIDENCE', 'CLAIM_TO_REQUIREMENT', 'CLAIM_TO_MATCH', 'CLAIM_TO_GAP', 'CLAIM_TO_EVIDENCE', 'CLAIM_TO_VERSION')",
+      ],
+    },
+  },
+  indexes: [
+    { name: 'intelligence_input_execution_idx', table: 'intelligence_input_generations', unique: true, columns: ['execution_id'] },
+    { name: 'intelligence_input_idempotency_idx', table: 'intelligence_input_generations', unique: true, columns: ['idempotency_key'] },
+    { name: 'intelligence_requirements_jd_idx', table: 'intelligence_requirements', unique: false, columns: ['jd_revision_id'] },
+    { name: 'intelligence_matches_requirement_idx', table: 'intelligence_matches', unique: false, columns: ['requirement_id', 'evidence_snapshot_id'] },
+    { name: 'intelligence_positioning_opportunity_idx', table: 'intelligence_positioning_versions', unique: false, columns: ['opportunity_id', 'version_number'] },
+    { name: 'intelligence_claim_version_idx', table: 'intelligence_positioning_claims', unique: false, columns: ['positioning_version_id', 'ordinal'] },
+    { name: 'intelligence_edges_requirement_idx', table: 'intelligence_provenance_edges', unique: false, columns: ['requirement_id'] },
+  ],
+};
+
+function renderIntelligenceSchemaSql() {
+  const tableStatements = Object.entries(INTELLIGENCE_SCHEMA_CONTRACT.tables).map(([tableName, contract]) => {
+    const definitions = contract.columns.map((column) => {
+      const parts = [sqlIdentifier(column.name), column.type];
+      if (column.primaryKey) parts.push('PRIMARY KEY');
+      if (column.notNull) parts.push('NOT NULL');
+      return parts.join(' ');
+    });
+    for (const columns of contract.uniqueConstraints) definitions.push(`UNIQUE (${columns.map(sqlIdentifier).join(', ')})`);
+    for (const foreignKey of contract.foreignKeys) {
+      definitions.push(
+        `FOREIGN KEY (${foreignKey.columns.map(sqlIdentifier).join(', ')}) REFERENCES `
+        + `${sqlIdentifier(foreignKey.referencedTable)} (${foreignKey.referencedColumns.map(sqlIdentifier).join(', ')}) `
+        + `ON DELETE ${foreignKey.onDelete}`,
+      );
+    }
+    for (const check of contract.checks) definitions.push(`CHECK (${check})`);
+    return `CREATE TABLE IF NOT EXISTS ${sqlIdentifier(tableName)} (\n  ${definitions.join(',\n  ')}\n);`;
+  });
+  const indexStatements = INTELLIGENCE_SCHEMA_CONTRACT.indexes.map((index) => (
+    `CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${sqlIdentifier(index.name)} `
+    + `ON ${sqlIdentifier(index.table)} (${index.columns.map(sqlIdentifier).join(', ')});`
+  ));
+  return [...tableStatements, ...indexStatements].join('\n');
+}
+
+function readIntelligenceSchemaVersion(database) {
+  const value = database.prepare(`SELECT value FROM ${METADATA_TABLE} WHERE key = ?`).pluck().get(INTELLIGENCE_SCHEMA_KEY);
+  if (value === undefined) return 0;
+  if (typeof value !== 'string' || !/^(0|[1-9]\d*)$/.test(value)) {
+    throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', 'Intelligence schema version is invalid.');
+  }
+  const version = Number(value);
+  if (!Number.isSafeInteger(version) || version < 0) {
+    throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', 'Intelligence schema version is invalid.');
+  }
+  return version;
+}
+
+function assertIntelligenceTableStructure(database) {
+  for (const [tableName, contract] of Object.entries(INTELLIGENCE_SCHEMA_CONTRACT.tables)) {
+    const actualColumns = pragmaRows(database, 'table_info', tableName);
+    if (actualColumns.length === 0) {
+      throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence table is missing: ${tableName}`);
+    }
+    const byName = new Map(actualColumns.map((column) => [column.name, column]));
+    for (const expected of contract.columns) {
+      const actual = byName.get(expected.name);
+      if (!actual || String(actual.type || '').trim().toUpperCase() !== expected.type || Number(actual.notnull) !== (expected.notNull ? 1 : 0)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence column is invalid: ${tableName}.${expected.name}`);
+      }
+    }
+    const actualPrimaryKey = actualColumns
+      .filter((column) => Number(column.pk) > 0)
+      .sort((left, right) => Number(left.pk) - Number(right.pk))
+      .map((column) => column.name);
+    const expectedPrimaryKey = contract.columns.filter((column) => column.primaryKey).map((column) => column.name);
+    if (!sameColumns(actualPrimaryKey, expectedPrimaryKey)) {
+      throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence primary key is invalid: ${tableName}`);
+    }
+  }
+}
+
+function assertIntelligenceIndexes(database) {
+  for (const [tableName, contract] of Object.entries(INTELLIGENCE_SCHEMA_CONTRACT.tables)) {
+    const indexes = pragmaRows(database, 'index_list', tableName);
+    for (const uniqueColumns of contract.uniqueConstraints) {
+      const hasConstraint = indexes.some((index) => (
+        Number(index.unique) === 1
+        && Number(index.partial || 0) === 0
+        && sameColumns(indexColumns(database, index.name), uniqueColumns)
+      ));
+      if (!hasConstraint) throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence unique constraint is missing: ${tableName}`);
+    }
+  }
+  for (const index of INTELLIGENCE_SCHEMA_CONTRACT.indexes) {
+    const row = pragmaRows(database, 'index_list', index.table).find((candidate) => candidate.name === index.name);
+    if (
+      !row
+      || Number(row.unique) !== (index.unique ? 1 : 0)
+      || Number(row.partial || 0) !== 0
+      || !sameColumns(indexColumns(database, index.name), index.columns)
+    ) {
+      throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence index is invalid: ${index.name}`);
+    }
+  }
+}
+
+function assertIntelligenceForeignKeys(database) {
+  for (const [tableName, contract] of Object.entries(INTELLIGENCE_SCHEMA_CONTRACT.tables)) {
+    const foreignKeys = pragmaRows(database, 'foreign_key_list', tableName);
+    for (const expected of contract.foreignKeys) {
+      const found = foreignKeys.some((foreignKey) => (
+        foreignKey.table === expected.referencedTable
+        && foreignKey.from === expected.columns[0]
+        && foreignKey.to === expected.referencedColumns[0]
+        && String(foreignKey.on_delete).toUpperCase() === expected.onDelete
+      ));
+      if (!found) throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence foreign key is invalid: ${tableName}`);
+    }
+  }
+  const integrity = database.pragma('foreign_key_check');
+  if (integrity.length > 0) throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', 'Intelligence foreign-key integrity check failed.');
+}
+
+function assertIntelligenceChecks(database) {
+  for (const [tableName, contract] of Object.entries(INTELLIGENCE_SCHEMA_CONTRACT.tables)) {
+    const row = database.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(tableName);
+    const sql = String(row?.sql || '').toLowerCase();
+    for (const check of contract.checks) {
+      const token = check.toLowerCase().replace(/\s+/g, '');
+      if (!sql.replace(/\s+/g, '').includes(token)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', `Intelligence constraint is missing: ${tableName}`);
+      }
+    }
+  }
+}
+
+function assertIntelligenceDataIntegrity(database) {
+  const invalidData = (message) => {
+    throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', message);
+  };
+  const parseRecordJson = (value, fieldName) => {
+    try {
+      return JSON.parse(value);
+    } catch {
+      invalidData(`Intelligence ${fieldName} is not valid JSON.`);
+    }
+  };
+  const snapshots = new Map();
+  const loadSnapshot = (row) => {
+    if (!row) invalidData('Intelligence Evidence snapshot is missing.');
+    if (snapshots.has(row.evidence_snapshot_id)) return snapshots.get(row.evidence_snapshot_id);
+    const ids = parseRecordJson(row.evidence_revision_ids_json, 'Evidence snapshot revisions');
+    if (!Array.isArray(ids) || ids.length === 0) invalidData('Intelligence Evidence snapshot revisions are invalid.');
+    const revisions = ids.map((evidenceRevisionId) => {
+      const revision = database.prepare('SELECT * FROM evidence_revisions WHERE evidence_revision_id = ?').get(evidenceRevisionId);
+      if (!revision) invalidData('Intelligence Evidence snapshot references a missing Evidence revision.');
+      let provenance;
+      try {
+        provenance = JSON.parse(revision.provenance_json);
+      } catch {
+        invalidData('Intelligence Evidence snapshot references invalid Evidence provenance.');
+      }
+      return {
+        evidence_revision_id: revision.evidence_revision_id,
+        evidence_id: revision.evidence_id,
+        factual_content: revision.factual_content,
+        responsibility_boundary: revision.responsibility_boundary,
+        outcome: revision.outcome,
+        confirmation_state: revision.confirmation_state,
+        provenance,
+      };
+    });
+    let rebuilt;
+    try {
+      rebuilt = buildEvidenceSnapshot({
+        evidenceRevisionIds: ids,
+        evidenceRevisions: revisions,
+        expectedEvidenceId: row.evidence_id,
+        inputGeneration: row.input_generation,
+        contractVersion: row.contract_version,
+      });
+    } catch (error) {
+      invalidData(`Intelligence Evidence snapshot is ineligible: ${error.message}`);
+    }
+    if (rebuilt.evidence_snapshot_id !== row.evidence_snapshot_id) invalidData('Intelligence Evidence snapshot identity is invalid.');
+    snapshots.set(row.evidence_snapshot_id, rebuilt);
+    return rebuilt;
+  };
+
+  const orphanClaims = database.prepare(`
+    SELECT c.positioning_claim_id
+      FROM intelligence_positioning_claims c
+      LEFT JOIN intelligence_positioning_versions v ON v.positioning_version_id = c.positioning_version_id
+     WHERE v.positioning_version_id IS NULL
+  `).all();
+  if (orphanClaims.length > 0) throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', 'Intelligence positioning claim parent is invalid.');
+  const malformedJson = database.prepare(`
+    SELECT evidence_snapshot_id AS record_id FROM intelligence_evidence_snapshots WHERE json_valid(evidence_revision_ids_json) = 0
+    UNION ALL
+    SELECT analysis_id FROM intelligence_input_generations WHERE json_valid(evidence_revision_ids_json) = 0
+    UNION ALL
+    SELECT requirement_id FROM intelligence_requirements WHERE json_valid(source_ref_json) = 0 OR json_valid(uncertainty_json) = 0
+    UNION ALL
+    SELECT match_id FROM intelligence_matches WHERE json_valid(decision_facts_json) = 0 OR json_valid(evidence_revision_ids_json) = 0 OR json_valid(missing_dimensions_json) = 0
+    UNION ALL
+    SELECT positioning_version_id FROM intelligence_positioning_versions WHERE json_valid(claims_json) = 0
+    UNION ALL
+    SELECT positioning_claim_id FROM intelligence_positioning_claims WHERE json_valid(evidence_revision_ids_json) = 0
+    UNION ALL
+    SELECT edge_id FROM intelligence_provenance_edges WHERE jd_source_ref_json IS NOT NULL AND json_valid(jd_source_ref_json) = 0
+  `).all();
+  if (malformedJson.length > 0) throw new FoundationPersistenceError('INTELLIGENCE_SCHEMA_INVALID', 'Intelligence JSON record is invalid.');
+
+  for (const row of database.prepare('SELECT * FROM intelligence_evidence_snapshots').all()) loadSnapshot(row);
+
+  for (const row of database.prepare('SELECT * FROM intelligence_input_generations').all()) {
+    const snapshot = loadSnapshot(database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(row.evidence_snapshot_id));
+    const evidenceRevisionIds = parseRecordJson(row.evidence_revision_ids_json, 'input generation revisions');
+    if (canonicalSerialize(evidenceRevisionIds) !== canonicalSerialize(snapshot.evidence_revision_ids)) invalidData('Intelligence input generation Evidence identities are inconsistent.');
+    const opportunity = database.prepare('SELECT opportunity_id FROM opportunities WHERE opportunity_id = ?').get(row.opportunity_id);
+    const jd = database.prepare('SELECT opportunity_id, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(row.jd_revision_id);
+    if (!opportunity || !jd || jd.opportunity_id !== row.opportunity_id || jd.availability_status !== 'AVAILABLE') invalidData('Intelligence input generation context is invalid.');
+    try {
+      const expected = buildInputBundle({
+        opportunityId: row.opportunity_id,
+        jdRevisionId: row.jd_revision_id,
+        evidenceSnapshot: snapshot,
+        operationType: row.operation_type,
+        schemaVersion: row.schema_version,
+        executionId: row.execution_id,
+        idempotencyKey: row.idempotency_key,
+        inputGeneration: row.input_generation,
+        requestedAt: row.requested_at,
+        disclosureClassification: row.disclosure_classification,
+      });
+      if (expected.analysis_id !== row.analysis_id) invalidData('Intelligence analysis identity is invalid.');
+    } catch (error) {
+      invalidData(`Intelligence input generation is invalid: ${error.message}`);
+    }
+  }
+
+  const requirements = new Map();
+  for (const row of database.prepare('SELECT * FROM intelligence_requirements').all()) {
+    const jd = database.prepare('SELECT jd_revision_id, content, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(row.jd_revision_id);
+    if (!jd) invalidData('Intelligence requirement JD revision is missing.');
+    if (row.analysis_id) {
+      const analysis = database.prepare('SELECT jd_revision_id FROM intelligence_input_generations WHERE analysis_id = ?').get(row.analysis_id);
+      if (!analysis || analysis.jd_revision_id !== row.jd_revision_id) invalidData('Intelligence requirement analysis edge is invalid.');
+    }
+    let requirement;
+    try {
+      requirement = validateRequirement({
+        requirement_id: row.requirement_id,
+        jd_revision_id: row.jd_revision_id,
+        source_ref: parseRecordJson(row.source_ref_json, 'requirement source'),
+        normalized_content: row.normalized_content,
+        requirement_type: row.requirement_type,
+        priority: row.priority,
+        explicitness: row.explicitness,
+        uncertainty: parseRecordJson(row.uncertainty_json, 'requirement uncertainty'),
+        extraction_status: row.extraction_status,
+        contract_version: row.contract_version,
+      });
+    } catch (error) {
+      invalidData(`Intelligence requirement is invalid: ${error.message}`);
+    }
+    if (requirement.requirement_id !== row.requirement_id) invalidData('Intelligence requirement identity is invalid.');
+    if (!requirement.ready || jd.availability_status !== 'AVAILABLE' || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content)) invalidData('Intelligence requirement is unavailable or its source anchor is not resolvable.');
+    requirements.set(row.requirement_id, requirement);
+  }
+
+  const matches = new Map();
+  for (const row of database.prepare('SELECT * FROM intelligence_matches').all()) {
+    const requirement = requirements.get(row.requirement_id);
+    const snapshot = loadSnapshot(database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(row.evidence_snapshot_id));
+    if (!requirement || requirement.jd_revision_id !== row.jd_revision_id || row.input_generation !== snapshot.input_generation) invalidData('Intelligence match provenance is invalid.');
+    let match;
+    try {
+      match = validateMatchRecord({
+        match_id: row.match_id,
+        gap_id: row.gap_id,
+        jd_revision_id: row.jd_revision_id,
+        requirement_id: row.requirement_id,
+        evidence_snapshot_id: row.evidence_snapshot_id,
+        input_generation: row.input_generation,
+        classification: row.classification,
+        decision_facts: parseRecordJson(row.decision_facts_json, 'match decision facts'),
+        evidence_revision_ids: parseRecordJson(row.evidence_revision_ids_json, 'match Evidence'),
+        missing_dimensions: parseRecordJson(row.missing_dimensions_json, 'match missing dimensions'),
+        explanation: row.explanation,
+        boundary: row.boundary,
+      }, snapshot);
+    } catch (error) {
+      invalidData(`Intelligence match is invalid: ${error.message}`);
+    }
+    matches.set(row.match_id, match);
+  }
+
+  const provenanceEdges = database.prepare('SELECT * FROM intelligence_provenance_edges').all();
+  const hasEdge = (edgeType, fields, inputGeneration) => provenanceEdges.some((edge) => (
+    edge.edge_type === edgeType
+    && edge.input_generation === inputGeneration
+    && Object.entries(fields).every(([key, value]) => {
+      const actual = key === 'jd_source_ref'
+        ? (edge.jd_source_ref_json === null ? null : parseRecordJson(edge.jd_source_ref_json, 'provenance source'))
+        : edge[key];
+      return canonicalSerialize(actual ?? null) === canonicalSerialize(value ?? null);
+    })
+  ));
+  for (const edge of provenanceEdges) {
+    if (!database.prepare('SELECT analysis_id FROM intelligence_input_generations WHERE input_generation = ? LIMIT 1').get(edge.input_generation)) invalidData('Intelligence provenance edge generation is invalid.');
+    if (edge.jd_revision_id && !database.prepare('SELECT jd_revision_id FROM jd_revisions WHERE jd_revision_id = ?').get(edge.jd_revision_id)) invalidData('Intelligence provenance JD edge is invalid.');
+    if (edge.requirement_id && !requirements.has(edge.requirement_id)) invalidData('Intelligence provenance requirement edge is invalid.');
+    if (edge.match_id && !matches.has(edge.match_id)) invalidData('Intelligence provenance match edge is invalid.');
+    if (edge.gap_id && !database.prepare('SELECT match_id FROM intelligence_matches WHERE gap_id = ?').get(edge.gap_id)) invalidData('Intelligence provenance gap edge is invalid.');
+    if (edge.evidence_revision_id) {
+      const revision = database.prepare('SELECT confirmation_state FROM evidence_revisions WHERE evidence_revision_id = ?').get(edge.evidence_revision_id);
+      if (!revision || revision.confirmation_state !== 'CONFIRMED') invalidData('Intelligence provenance Evidence edge is invalid.');
+    }
+    if (edge.positioning_claim_id && !database.prepare('SELECT positioning_claim_id FROM intelligence_positioning_claims WHERE positioning_claim_id = ?').get(edge.positioning_claim_id)) invalidData('Intelligence provenance claim edge is invalid.');
+    if (edge.positioning_version_id && !database.prepare('SELECT positioning_version_id FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(edge.positioning_version_id)) invalidData('Intelligence provenance positioning edge is invalid.');
+  }
+  for (const match of matches.values()) {
+    const requirement = requirements.get(match.requirement_id);
+    const snapshot = loadSnapshot(database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(match.evidence_snapshot_id));
+    const trace = validateTraceability({
+      jdSourceRef: requirement.source_ref,
+      jdRevisionId: requirement.jd_revision_id,
+      requirement,
+      match,
+      snapshot,
+    });
+    for (const edge of trace.provenance_edges) {
+      if (!hasEdge(edge.edge_type, edge, match.input_generation)) invalidData('Intelligence match provenance edge is missing.');
+    }
+  }
+
+  for (const row of database.prepare('SELECT * FROM intelligence_positioning_versions').all()) {
+    const snapshot = loadSnapshot(database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(row.evidence_snapshot_id));
+    const analysis = database.prepare('SELECT opportunity_id, jd_revision_id, evidence_snapshot_id, input_generation FROM intelligence_input_generations WHERE analysis_id = ?').get(row.analysis_id);
+    const jd = database.prepare('SELECT opportunity_id FROM jd_revisions WHERE jd_revision_id = ?').get(row.jd_revision_id);
+    if (!analysis || !jd || jd.opportunity_id !== row.opportunity_id
+      || analysis.opportunity_id !== row.opportunity_id
+      || analysis.jd_revision_id !== row.jd_revision_id
+      || analysis.evidence_snapshot_id !== row.evidence_snapshot_id
+      || analysis.input_generation !== row.input_generation) {
+      invalidData('Intelligence positioning version provenance is invalid.');
+    }
+    const claimRows = database.prepare('SELECT * FROM intelligence_positioning_claims WHERE positioning_version_id = ? ORDER BY ordinal').all(row.positioning_version_id);
+    const claims = parseRecordJson(row.claims_json, 'positioning claims');
+    const claimRequirements = claimRows.map((claim) => requirements.get(claim.requirement_id)).filter(Boolean);
+    const relationRows = claimRows.map((claim) => {
+      if (claim.match_id) return matches.get(claim.match_id);
+      const relation = database.prepare('SELECT match_id FROM intelligence_matches WHERE gap_id = ?').get(claim.gap_id);
+      return relation ? matches.get(relation.match_id) : null;
+    }).filter(Boolean);
+    let version;
+    try {
+      version = validatePositioningVersion({
+        positioning_version_id: row.positioning_version_id,
+        opportunity_id: row.opportunity_id,
+        jd_revision_id: row.jd_revision_id,
+        analysis_id: row.analysis_id,
+        evidence_snapshot: snapshot,
+        version_number: row.version_number,
+        state: row.state,
+        requirements: claimRequirements,
+        matches: relationRows,
+        claims,
+      });
+    } catch (error) {
+      invalidData(`Intelligence positioning version is invalid: ${error.message}`);
+    }
+    if (version.positioning_version_id !== row.positioning_version_id || canonicalSerialize(version.claims) !== canonicalSerialize(claims)) invalidData('Intelligence positioning claim identities are invalid.');
+    if (claimRows.length !== version.claims.length) invalidData('Intelligence positioning claim rows are incomplete.');
+    for (let index = 0; index < claimRows.length; index += 1) {
+      const claim = claimRows[index];
+      const normalized = version.claims[index];
+      const storedEvidenceIds = parseRecordJson(claim.evidence_revision_ids_json, 'positioning claim Evidence');
+      if (
+        claim.positioning_claim_id !== normalized.positioning_claim_id
+        || claim.ordinal !== normalized.ordinal
+        || claim.requirement_id !== normalized.requirement_id
+        || (claim.match_id ?? null) !== (normalized.match_id ?? null)
+        || (claim.gap_id ?? null) !== (normalized.gap_id ?? null)
+        || canonicalSerialize(storedEvidenceIds) !== canonicalSerialize(normalized.evidence_revision_ids)
+        || claim.claim_kind !== normalized.claim_kind
+        || claim.claim_text !== normalized.claim_text
+        || Boolean(claim.verified) !== Boolean(normalized.verified)
+      ) invalidData('Intelligence positioning claim row is inconsistent.');
+    }
+    const versionInputGeneration = row.input_generation;
+    for (const claim of version.claims) {
+      const edgeChecks = [
+        ['CLAIM_TO_REQUIREMENT', { requirement_id: claim.requirement_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: row.positioning_version_id }],
+        [claim.match_id ? 'CLAIM_TO_MATCH' : 'CLAIM_TO_GAP', claim.match_id
+          ? { match_id: claim.match_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: row.positioning_version_id }
+          : { gap_id: claim.gap_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: row.positioning_version_id }],
+        ['CLAIM_TO_VERSION', { positioning_claim_id: claim.positioning_claim_id, positioning_version_id: row.positioning_version_id }],
+        ...claim.evidence_revision_ids.map((evidenceRevisionId) => ['CLAIM_TO_EVIDENCE', { evidence_revision_id: evidenceRevisionId, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: row.positioning_version_id }]),
+      ];
+      for (const [edgeType, fields] of edgeChecks) {
+        if (!hasEdge(edgeType, fields, versionInputGeneration)) invalidData('Intelligence positioning provenance edge is missing.');
+      }
+    }
+  }
+}
+
+function assertIntelligenceSchema(database) {
+  assertIntelligenceTableStructure(database);
+  assertIntelligenceIndexes(database);
+  assertIntelligenceForeignKeys(database);
+  assertIntelligenceChecks(database);
+  assertIntelligenceDataIntegrity(database);
+}
+
+function migrateIntelligenceSchema(database, options = {}) {
+  assertMigrationOwnership(options.privateRoot, options.ownership, options);
+  const currentVersion = readIntelligenceSchemaVersion(database);
+  if (currentVersion > INTELLIGENCE_SCHEMA_VERSION) {
+    throw new FoundationPersistenceError(
+      'INTELLIGENCE_VERSION_UNSUPPORTED',
+      `Unsupported intelligence schema version: ${currentVersion}`,
+    );
+  }
+  if (currentVersion === INTELLIGENCE_SCHEMA_VERSION) {
+    assertIntelligenceSchema(database);
+    assertMigrationOwnership(options.privateRoot, options.ownership, options);
+    return;
+  }
+  try {
+    const migrate = database.transaction(() => {
+      assertMigrationOwnership(options.privateRoot, options.ownership, options);
+      database.exec(renderIntelligenceSchemaSql());
+      runMigrationCheckpoint(options, 'intelligence-after-schema');
+      assertMigrationOwnership(options.privateRoot, options.ownership, options);
+      assertIntelligenceSchema(database);
+      if (options.failurePoint === 'intelligence-before-marker') {
+        throw new FoundationPersistenceError('INTELLIGENCE_MIGRATION_FAILED', 'Synthetic intelligence migration failure before schema publication.');
+      }
+      database.prepare(`INSERT OR REPLACE INTO ${METADATA_TABLE} (key, value) VALUES (?, ?)`).run(
+        INTELLIGENCE_SCHEMA_KEY,
+        String(INTELLIGENCE_SCHEMA_VERSION),
+      );
+      runMigrationCheckpoint(options, 'intelligence-after-marker');
+      assertMigrationOwnership(options.privateRoot, options.ownership, options);
+      assertIntelligenceSchema(database);
+    });
+    migrate();
+    assertMigrationOwnership(options.privateRoot, options.ownership, options);
+  } catch (error) {
+    if (error instanceof FoundationPersistenceError) throw error;
+    throw new FoundationPersistenceError('INTELLIGENCE_MIGRATION_FAILED', error.message);
+  }
+}
+
 function migrateOpportunityEvidenceSchema(database, options = {}) {
   assertMigrationOwnership(options.privateRoot, options.ownership, options);
   const currentVersion = readOpportunityEvidenceSchemaVersion(database);
@@ -868,6 +1552,624 @@ function createDomainOperations(database, privateRoot, ownership, options, isClo
   };
 }
 
+function intelligenceStoredJson(value, fieldName) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new FoundationPersistenceError('INTELLIGENCE_RECORD_INVALID', `${fieldName} is not valid JSON.`);
+  }
+}
+
+function intelligenceEdgeId(edge) {
+  return `edge:${crypto.createHash('sha256').update(canonicalSerialize(edge), 'utf8').digest('hex')}`;
+}
+
+function asIntelligencePersistenceError(error) {
+  if (error instanceof FoundationPersistenceError) return error;
+  if (error instanceof IntelligenceValidationError) return new FoundationPersistenceError(error.code, error.message);
+  return new FoundationPersistenceError('INTELLIGENCE_OPERATION_FAILED', error.message || 'Intelligence operation failed.');
+}
+
+function intelligenceSourceIsUnavailable(sourceRef) {
+  const locator = typeof sourceRef === 'string' ? sourceRef : sourceRef?.locator ?? sourceRef?.anchor ?? sourceRef?.source;
+  return typeof locator === 'string' && /^unavailable:/i.test(locator);
+}
+
+function intelligenceSourceResolvesToJd(sourceRef, content) {
+  if (intelligenceSourceIsUnavailable(sourceRef) || typeof content !== 'string' || content.length === 0) return false;
+  const locator = typeof sourceRef === 'string' ? sourceRef : sourceRef?.locator ?? sourceRef?.anchor ?? sourceRef?.source;
+  const lineMatch = /^(?:jd:)?line:(\d+)$/i.exec(locator);
+  if (lineMatch) {
+    const lineNumber = Number(lineMatch[1]);
+    return lineNumber >= 1 && lineNumber <= content.split(/\r?\n/).length;
+  }
+  const offsetMatch = /^(?:jd:)?offset:(\d+)(?:-(\d+))?$/i.exec(locator);
+  if (offsetMatch) {
+    const start = Number(offsetMatch[1]);
+    const end = offsetMatch[2] === undefined ? start : Number(offsetMatch[2]);
+    return start >= 0 && end >= start && end <= content.length;
+  }
+  if (typeof sourceRef === 'object' && Number.isSafeInteger(sourceRef.start)) {
+    const end = sourceRef.end === undefined ? sourceRef.start : sourceRef.end;
+    return sourceRef.start >= 0 && end >= sourceRef.start && end <= content.length;
+  }
+  return true;
+}
+
+function createIntelligenceOperations(database, privateRoot, ownership, options, isClosed) {
+  const repositoryRoot = options.repositoryRoot;
+
+  function assertIntelligenceReady() {
+    if (isClosed()) throw new FoundationPersistenceError('FOUNDATION_CLOSED', 'The intelligence store is closed.');
+    assertPrivateRootStable(privateRoot, { repositoryRoot });
+    assertOwnership(ownership, privateRoot);
+    if (readIntelligenceSchemaVersion(database) !== INTELLIGENCE_SCHEMA_VERSION) {
+      throw new FoundationPersistenceError('INTELLIGENCE_NOT_READY', 'Intelligence schema is not ready.');
+    }
+  }
+
+  function run(operation) {
+    try {
+      assertIntelligenceReady();
+      return operation();
+    } catch (error) {
+      throw asIntelligencePersistenceError(error);
+    }
+  }
+
+  function readEvidenceRevision(evidenceRevisionId) {
+    const row = database.prepare('SELECT * FROM evidence_revisions WHERE evidence_revision_id = ?').get(evidenceRevisionId);
+    if (!row) return null;
+    let provenance;
+    try {
+      provenance = JSON.parse(row.provenance_json);
+    } catch {
+      throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence provenance is not valid JSON.');
+    }
+    return {
+      evidence_revision_id: row.evidence_revision_id,
+      evidence_id: row.evidence_id,
+      revision_number: row.revision_number,
+      factual_content: row.factual_content,
+      provenance,
+      responsibility_boundary: row.responsibility_boundary,
+      outcome: row.outcome,
+      metric_definition: row.metric_definition,
+      confirmation_state: row.confirmation_state,
+      created_at: row.created_at,
+    };
+  }
+
+  function resolveEvidenceSnapshot(input = {}) {
+    const suppliedSnapshot = input.evidence_snapshot ?? input.evidenceSnapshot ?? input.snapshot;
+    if (suppliedSnapshot) {
+      const suppliedIds = suppliedSnapshot.evidence_revision_ids ?? suppliedSnapshot.evidenceRevisionIds;
+      if (Array.isArray(suppliedIds) && suppliedIds.length === 0) {
+        throw new FoundationPersistenceError('INTELLIGENCE_EVIDENCE_UNAVAILABLE', 'No eligible confirmed Evidence revisions were selected.');
+      }
+      const supplied = validateSnapshot(suppliedSnapshot);
+      const requestedIds = input.evidence_revision_ids ?? input.evidenceRevisionIds;
+      if (requestedIds !== undefined && canonicalSerialize(requestedIds) !== canonicalSerialize(supplied.evidence_revision_ids)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence revision identities do not match the supplied snapshot.');
+      }
+      const suppliedGeneration = input.input_generation ?? input.inputGeneration;
+      if (suppliedGeneration !== undefined && String(suppliedGeneration) !== supplied.input_generation) {
+        throw new FoundationPersistenceError('INTELLIGENCE_GENERATION_MISMATCH', 'Input generation does not match the supplied Evidence snapshot.');
+      }
+      const suppliedEvidenceId = input.evidence_id ?? input.evidenceId;
+      if (suppliedEvidenceId !== undefined && suppliedEvidenceId !== supplied.evidence_id) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Evidence identity does not match the supplied snapshot.');
+      }
+      const canonical = buildEvidenceSnapshot({
+        evidenceRevisionIds: supplied.evidence_revision_ids,
+        evidenceRevisions: supplied.evidence_revision_ids.map((id) => readEvidenceRevision(id)),
+        expectedEvidenceId: supplied.evidence_id,
+        inputGeneration: supplied.input_generation,
+        contractVersion: supplied.contract_version,
+      });
+      if (canonicalSerialize(canonical) !== canonicalSerialize(supplied)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Supplied Evidence snapshot does not match canonical confirmed Evidence revisions.');
+      }
+      return canonical;
+    }
+    const ids = input.evidence_revision_ids ?? input.evidenceRevisionIds;
+    if (!Array.isArray(ids) || ids.length === 0) throw new FoundationPersistenceError('INTELLIGENCE_EVIDENCE_UNAVAILABLE', 'No eligible confirmed Evidence revisions were selected.');
+    const revisions = ids.map((id) => readEvidenceRevision(id));
+    return buildEvidenceSnapshot({
+      evidenceRevisionIds: ids,
+      evidenceRevisions: revisions,
+      expectedEvidenceId: input.evidence_id ?? input.evidenceId,
+      inputGeneration: input.input_generation ?? input.inputGeneration,
+      contractVersion: input.contract_version ?? input.contractVersion,
+    });
+  }
+
+  function assertSelectedContext(bundle) {
+    const opportunity = database.prepare('SELECT opportunity_id FROM opportunities WHERE opportunity_id = ?').get(bundle.opportunity_id);
+    if (!opportunity) throw new FoundationPersistenceError('OPPORTUNITY_NOT_FOUND', 'Opportunity does not exist.');
+    const revision = database.prepare('SELECT opportunity_id, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(bundle.jd_revision_id);
+    if (!revision || revision.opportunity_id !== bundle.opportunity_id) {
+      throw new FoundationPersistenceError('JD_REVISION_INVALID', 'JD revision does not belong to the selected Opportunity.');
+    }
+    if (revision.availability_status !== 'AVAILABLE') {
+      throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Selected JD revision is unavailable.');
+    }
+  }
+
+  function readSnapshot(snapshotId) {
+    const row = database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(snapshotId);
+    if (!row) throw new FoundationPersistenceError('INTELLIGENCE_EVIDENCE_UNAVAILABLE', 'Evidence snapshot does not exist.');
+    const ids = intelligenceStoredJson(row.evidence_revision_ids_json, 'evidence_revision_ids_json');
+    const revisions = ids.map((id) => readEvidenceRevision(id));
+    return validateSnapshot({
+      evidence_snapshot_id: row.evidence_snapshot_id,
+      evidence_id: row.evidence_id,
+      evidence_revision_ids: ids,
+      evidence_revisions: revisions,
+      input_generation: row.input_generation,
+      contract_version: row.contract_version,
+    });
+  }
+
+  function persistSnapshot(snapshot, requestedAt) {
+    const serializedIds = canonicalSerialize(snapshot.evidence_revision_ids);
+    const existing = database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(snapshot.evidence_snapshot_id);
+    if (existing) {
+      if (
+        existing.evidence_id !== snapshot.evidence_id
+        || existing.input_generation !== snapshot.input_generation
+        || existing.contract_version !== snapshot.contract_version
+        || existing.evidence_revision_ids_json !== serializedIds
+      ) {
+        throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Evidence snapshot identity is already bound to different immutable inputs.');
+      }
+      return;
+    }
+    database.prepare(`
+      INSERT INTO intelligence_evidence_snapshots (
+        evidence_snapshot_id, evidence_id, evidence_revision_ids_json, input_generation, contract_version, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      snapshot.evidence_snapshot_id,
+      snapshot.evidence_id,
+      serializedIds,
+      snapshot.input_generation,
+      snapshot.contract_version,
+      requestedAt,
+    );
+  }
+
+  function buildSnapshot(input = {}) {
+    return run(() => resolveEvidenceSnapshot(input));
+  }
+
+  function createInputGeneration(input = {}) {
+    return run(() => {
+      const snapshot = resolveEvidenceSnapshot(input);
+      const bundle = buildInputBundle({ ...input, evidenceSnapshot: snapshot });
+      assertSelectedContext(bundle);
+      const existing = database.prepare('SELECT * FROM intelligence_input_generations WHERE analysis_id = ?').get(bundle.analysis_id);
+      const conflictingIdentity = database.prepare(
+        'SELECT analysis_id FROM intelligence_input_generations WHERE execution_id = ? OR idempotency_key = ? LIMIT 1',
+      ).get(bundle.execution_id, bundle.idempotency_key);
+      if (conflictingIdentity && conflictingIdentity.analysis_id !== bundle.analysis_id) {
+        throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution or idempotency identity is already bound to a different analysis.');
+      }
+      const requestedAt = bundle.requested_at;
+      const persisted = database.transaction(() => {
+        persistSnapshot(snapshot, requestedAt);
+        if (existing) {
+          const existingIds = intelligenceStoredJson(existing.evidence_revision_ids_json, 'evidence_revision_ids_json');
+          if (
+            existing.opportunity_id !== bundle.opportunity_id
+            || existing.jd_revision_id !== bundle.jd_revision_id
+            || existing.evidence_snapshot_id !== bundle.evidence_snapshot_id
+            || existing.input_generation !== bundle.input_generation
+            || existing.operation_type !== bundle.operation_type
+            || existing.schema_version !== bundle.schema_version
+            || existing.execution_id !== bundle.execution_id
+            || existing.idempotency_key !== bundle.idempotency_key
+            || canonicalSerialize(existingIds) !== canonicalSerialize(bundle.evidence_revision_ids)
+            || existing.requested_at !== bundle.requested_at
+            || existing.disclosure_classification !== bundle.disclosure_classification
+          ) {
+            throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Analysis identity is already bound to different immutable inputs.');
+          }
+          return;
+        }
+        database.prepare(`
+          INSERT INTO intelligence_input_generations (
+            analysis_id, opportunity_id, jd_revision_id, evidence_snapshot_id,
+            evidence_revision_ids_json, operation_type, schema_version,
+            execution_id, idempotency_key, input_generation, requested_at,
+            disclosure_classification, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          bundle.analysis_id,
+          bundle.opportunity_id,
+          bundle.jd_revision_id,
+          bundle.evidence_snapshot_id,
+          canonicalSerialize(bundle.evidence_revision_ids),
+          bundle.operation_type,
+          bundle.schema_version,
+          bundle.execution_id,
+          bundle.idempotency_key,
+          bundle.input_generation,
+          bundle.requested_at,
+          bundle.disclosure_classification,
+          bundle.requested_at,
+        );
+      });
+      persisted();
+      return Object.freeze({ ...bundle, evidence_snapshot: snapshot });
+    });
+  }
+
+  function getInputGeneration(analysisId) {
+    return run(() => {
+      const row = database.prepare('SELECT * FROM intelligence_input_generations WHERE analysis_id = ?').get(analysisId);
+      if (!row) return null;
+      return Object.freeze({
+        analysis_id: row.analysis_id,
+        opportunity_id: row.opportunity_id,
+        jd_revision_id: row.jd_revision_id,
+        evidence_snapshot_id: row.evidence_snapshot_id,
+        evidence_revision_ids: intelligenceStoredJson(row.evidence_revision_ids_json, 'evidence_revision_ids_json'),
+        operation_type: row.operation_type,
+        schema_version: row.schema_version,
+        execution_id: row.execution_id,
+        idempotency_key: row.idempotency_key,
+        input_generation: row.input_generation,
+        requested_at: row.requested_at,
+        disclosure_classification: row.disclosure_classification,
+        evidence_snapshot: readSnapshot(row.evidence_snapshot_id),
+      });
+    });
+  }
+
+  function saveRequirement(input = {}) {
+    return run(() => {
+      const requirement = validateRequirement(input);
+      if (!requirement.ready) throw new FoundationPersistenceError('INTELLIGENCE_REQUIREMENT_NOT_READY', 'Requirement is not ready for persistence.');
+      const jd = database.prepare('SELECT jd_revision_id, content, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(requirement.jd_revision_id);
+      if (!jd) throw new FoundationPersistenceError('JD_REVISION_INVALID', 'Requirement JD revision does not exist.');
+      if (jd.availability_status !== 'AVAILABLE' || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Requirement source is unavailable.');
+      }
+      const analysisId = input.analysis_id ?? input.analysisId ?? null;
+      if (analysisId) {
+        const analysis = database.prepare('SELECT jd_revision_id FROM intelligence_input_generations WHERE analysis_id = ?').get(analysisId);
+        if (!analysis) throw new FoundationPersistenceError('INTELLIGENCE_INPUT_NOT_FOUND', 'Requirement analysis input generation does not exist.');
+        if (analysis.jd_revision_id !== requirement.jd_revision_id) throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Requirement does not belong to its analysis JD revision.');
+      }
+      const existing = database.prepare('SELECT * FROM intelligence_requirements WHERE requirement_id = ?').get(requirement.requirement_id);
+      if (existing) {
+        const existingValue = readRequirement(requirement.requirement_id);
+        if (existing.analysis_id !== analysisId || canonicalSerialize(existingValue) !== canonicalSerialize(requirement)) throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Requirement identity is already bound to different immutable inputs.');
+        return existingValue;
+      }
+      database.prepare(`
+        INSERT INTO intelligence_requirements (
+          requirement_id, analysis_id, jd_revision_id, source_ref_json,
+          normalized_content, requirement_type, priority, explicitness,
+          uncertainty_json, extraction_status, contract_version, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        requirement.requirement_id,
+        analysisId,
+        requirement.jd_revision_id,
+        canonicalSerialize(requirement.source_ref),
+        requirement.normalized_content,
+        requirement.requirement_type,
+        requirement.priority,
+        requirement.explicitness,
+        canonicalSerialize(requirement.uncertainty),
+        requirement.extraction_status,
+        requirement.contract_version,
+        input.created_at ?? input.createdAt ?? new Date().toISOString(),
+      );
+      return requirement;
+    });
+  }
+
+  function readRequirement(requirementId) {
+    const row = database.prepare('SELECT * FROM intelligence_requirements WHERE requirement_id = ?').get(requirementId);
+    if (!row) return null;
+    return validateRequirement({
+      requirement_id: row.requirement_id,
+      analysis_id: row.analysis_id,
+      jd_revision_id: row.jd_revision_id,
+      source_ref: intelligenceStoredJson(row.source_ref_json, 'source_ref_json'),
+      normalized_content: row.normalized_content,
+      requirement_type: row.requirement_type,
+      priority: row.priority,
+      explicitness: row.explicitness,
+      uncertainty: intelligenceStoredJson(row.uncertainty_json, 'uncertainty_json'),
+      extraction_status: row.extraction_status,
+      contract_version: row.contract_version,
+    });
+  }
+
+  function saveMatch(input = {}) {
+    return run(() => {
+      const snapshot = input.evidence_snapshot || input.evidenceSnapshot || input.snapshot
+        ? resolveEvidenceSnapshot(input)
+        : readSnapshot(input.evidence_snapshot_id ?? input.evidenceSnapshotId);
+      const suppliedRequirement = input.requirement?.requirement_id ? input.requirement : null;
+      const requestedRequirementId = input.requirement_id ?? input.requirementId ?? suppliedRequirement?.requirement_id;
+      if (suppliedRequirement && requestedRequirementId && suppliedRequirement.requirement_id !== requestedRequirementId) {
+        throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Match requirement identity is inconsistent.');
+      }
+      const requirement = readRequirement(requestedRequirementId);
+      if (!requirement) throw new FoundationPersistenceError('INTELLIGENCE_REQUIREMENT_NOT_FOUND', 'Match requirement does not exist.');
+      if (suppliedRequirement && canonicalSerialize(validateRequirement(suppliedRequirement)) !== canonicalSerialize(requirement)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match requirement does not match the canonical persisted requirement.');
+      }
+      const analysisId = input.analysis_id ?? input.analysisId;
+      if (analysisId) {
+        const analysis = database.prepare('SELECT jd_revision_id, evidence_snapshot_id, input_generation FROM intelligence_input_generations WHERE analysis_id = ?').get(analysisId);
+        if (!analysis) throw new FoundationPersistenceError('INTELLIGENCE_INPUT_NOT_FOUND', 'Match analysis input generation does not exist.');
+        if (analysis.jd_revision_id !== requirement.jd_revision_id || analysis.evidence_snapshot_id !== snapshot.evidence_snapshot_id || analysis.input_generation !== snapshot.input_generation) {
+          throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Match does not resolve to its immutable input generation.');
+        }
+      }
+      if (input.input_generation !== undefined && String(input.input_generation) !== snapshot.input_generation) {
+        throw new FoundationPersistenceError('INTELLIGENCE_GENERATION_MISMATCH', 'Match input generation does not match its Evidence snapshot.');
+      }
+      const match = validateMatchRecord({
+        ...input,
+        requirement_id: requirement.requirement_id,
+        jd_revision_id: requirement.jd_revision_id,
+        evidence_snapshot_id: snapshot.evidence_snapshot_id,
+        input_generation: snapshot.input_generation,
+      }, snapshot);
+      const existing = database.prepare('SELECT * FROM intelligence_matches WHERE match_id = ?').get(match.match_id);
+      if (existing) {
+        const existingMatch = readMatch(match.match_id);
+        if (canonicalSerialize(existingMatch) !== canonicalSerialize(match)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Match identity is already bound to different immutable inputs.');
+        }
+        return existingMatch;
+      }
+      const provenance = validateTraceability({
+        jdSourceRef: requirement.source_ref,
+        jdRevisionId: requirement.jd_revision_id,
+        requirement,
+        match,
+        snapshot,
+      });
+      database.transaction(() => {
+        database.prepare(`
+          INSERT INTO intelligence_matches (
+            match_id, gap_id, jd_revision_id, requirement_id, evidence_snapshot_id,
+            input_generation, classification, decision_facts_json,
+            evidence_revision_ids_json, missing_dimensions_json, explanation, boundary, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          match.match_id,
+          match.gap_id,
+          match.jd_revision_id,
+          match.requirement_id,
+          match.evidence_snapshot_id,
+          match.input_generation,
+          match.classification,
+          canonicalSerialize(match.decision_facts),
+          canonicalSerialize(match.evidence_revision_ids),
+          canonicalSerialize(match.missing_dimensions),
+          match.explanation,
+          match.boundary ?? null,
+          new Date().toISOString(),
+        );
+        persistProvenanceEdges(provenance.provenance_edges, match.input_generation);
+      })();
+      return match;
+    });
+  }
+
+  function readMatch(matchId) {
+    const row = database.prepare('SELECT * FROM intelligence_matches WHERE match_id = ?').get(matchId);
+    if (!row) return null;
+    const snapshot = readSnapshot(row.evidence_snapshot_id);
+    return validateMatchRecord({
+      match_id: row.match_id,
+      gap_id: row.gap_id,
+      jd_revision_id: row.jd_revision_id,
+      requirement_id: row.requirement_id,
+      evidence_snapshot_id: row.evidence_snapshot_id,
+      input_generation: row.input_generation,
+      classification: row.classification,
+      decision_facts: intelligenceStoredJson(row.decision_facts_json, 'decision_facts_json'),
+      evidence_revision_ids: intelligenceStoredJson(row.evidence_revision_ids_json, 'evidence_revision_ids_json'),
+      missing_dimensions: intelligenceStoredJson(row.missing_dimensions_json, 'missing_dimensions_json'),
+      explanation: row.explanation,
+      ...(row.boundary ? { boundary: row.boundary } : {}),
+    }, snapshot);
+  }
+
+  function readMatchOrGap(relationId) {
+    return readMatch(relationId) || (() => {
+      const row = database.prepare('SELECT match_id FROM intelligence_matches WHERE gap_id = ?').get(relationId);
+      return row ? readMatch(row.match_id) : null;
+    })();
+  }
+
+  function persistProvenanceEdges(edges, inputGeneration) {
+    for (const edge of edges) {
+      const edgeWithGeneration = { ...edge, input_generation: inputGeneration };
+      database.prepare(`
+        INSERT OR IGNORE INTO intelligence_provenance_edges (
+          edge_id, edge_type, jd_source_ref_json, jd_revision_id, requirement_id,
+          match_id, gap_id, evidence_revision_id, positioning_claim_id,
+          positioning_version_id, input_generation
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        intelligenceEdgeId(edgeWithGeneration),
+        edge.edge_type,
+        edge.jd_source_ref === undefined ? null : canonicalSerialize(edge.jd_source_ref),
+        edge.jd_revision_id ?? null,
+        edge.requirement_id ?? null,
+        edge.match_id ?? null,
+        edge.gap_id ?? null,
+        edge.evidence_revision_id ?? null,
+        edge.positioning_claim_id ?? null,
+        edge.positioning_version_id ?? null,
+        inputGeneration,
+      );
+    }
+  }
+
+  function savePositioningVersion(input = {}) {
+    return run(() => {
+      const snapshot = input.evidence_snapshot || input.evidenceSnapshot || input.snapshot
+        ? resolveEvidenceSnapshot(input)
+        : readSnapshot(input.evidence_snapshot_id ?? input.evidenceSnapshotId);
+      const opportunityId = input.opportunity_id ?? input.opportunityId;
+      const versionNumber = input.version_number ?? input.versionNumber ?? (
+        database.prepare('SELECT COALESCE(MAX(version_number), 0) + 1 AS next_version FROM intelligence_positioning_versions WHERE opportunity_id = ?').get(opportunityId).next_version
+      );
+      const claims = input.claims || [];
+      const requirements = [...new Set(claims.map((claim) => claim.requirement_id ?? claim.requirementId))]
+        .map((id) => readRequirement(id)).filter(Boolean);
+      const matchIds = [...new Set(claims.flatMap((claim) => [
+        claim.match_id ?? claim.matchId,
+        claim.gap_id ?? claim.gapId,
+      ]).filter(Boolean))];
+      const matches = matchIds.map((id) => readMatchOrGap(id)).filter(Boolean);
+      const version = validatePositioningVersion({
+        ...input,
+        opportunity_id: opportunityId,
+        version_number: versionNumber,
+        evidenceSnapshot: snapshot,
+        requirements,
+        matches,
+      });
+      const existing = database.prepare('SELECT positioning_version_id FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(version.positioning_version_id);
+      if (existing) {
+        const existingVersion = readPositioningVersion(version.positioning_version_id);
+        if (canonicalSerialize(existingVersion) !== canonicalSerialize(version)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Positioning version identity is already bound to different immutable inputs.');
+        }
+        return existingVersion;
+      }
+      const jd = database.prepare('SELECT opportunity_id FROM jd_revisions WHERE jd_revision_id = ?').get(version.jd_revision_id);
+      if (!jd || jd.opportunity_id !== version.opportunity_id) throw new FoundationPersistenceError('JD_REVISION_INVALID', 'Positioning JD revision does not belong to its Opportunity.');
+      if (!database.prepare('SELECT analysis_id FROM intelligence_input_generations WHERE analysis_id = ?').get(version.analysis_id)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_INPUT_NOT_FOUND', 'Positioning analysis input generation does not exist.');
+      }
+      const analysis = database.prepare(`
+        SELECT opportunity_id, jd_revision_id, evidence_snapshot_id, input_generation
+          FROM intelligence_input_generations
+         WHERE analysis_id = ?
+      `).get(version.analysis_id);
+      if (
+        analysis.opportunity_id !== version.opportunity_id
+        || analysis.jd_revision_id !== version.jd_revision_id
+        || analysis.evidence_snapshot_id !== version.evidence_snapshot_id
+        || analysis.input_generation !== version.input_generation
+      ) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning version does not resolve to its immutable input generation.');
+      }
+      database.transaction(() => {
+        database.prepare(`
+          INSERT INTO intelligence_positioning_versions (
+            positioning_version_id, opportunity_id, jd_revision_id, analysis_id,
+            evidence_snapshot_id, input_generation, version_number, state,
+            claims_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          version.positioning_version_id,
+          version.opportunity_id,
+          version.jd_revision_id,
+          version.analysis_id,
+          version.evidence_snapshot_id,
+          version.input_generation,
+          version.version_number,
+          version.state,
+          canonicalSerialize(version.claims),
+          new Date().toISOString(),
+        );
+        for (const claim of version.claims) {
+          database.prepare(`
+            INSERT INTO intelligence_positioning_claims (
+              positioning_claim_id, positioning_version_id, ordinal, requirement_id,
+              match_id, gap_id, evidence_revision_ids_json, claim_kind, claim_text, verified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            claim.positioning_claim_id,
+            version.positioning_version_id,
+            claim.ordinal,
+            claim.requirement_id,
+            claim.match_id,
+            claim.gap_id,
+            canonicalSerialize(claim.evidence_revision_ids),
+            claim.claim_kind,
+            claim.claim_text,
+            claim.verified ? 1 : 0,
+          );
+          persistProvenanceEdges([
+            { edge_type: 'CLAIM_TO_REQUIREMENT', requirement_id: claim.requirement_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id },
+            ...(claim.match_id ? [{ edge_type: 'CLAIM_TO_MATCH', match_id: claim.match_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id }] : []),
+            ...(claim.gap_id ? [{ edge_type: 'CLAIM_TO_GAP', gap_id: claim.gap_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id }] : []),
+            ...claim.evidence_revision_ids.map((evidenceRevisionId) => ({ edge_type: 'CLAIM_TO_EVIDENCE', evidence_revision_id: evidenceRevisionId, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id })),
+            { edge_type: 'CLAIM_TO_VERSION', positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id },
+          ], version.input_generation);
+        }
+      })();
+      return version;
+    });
+  }
+
+  function readPositioningVersion(positioningVersionId) {
+    const row = database.prepare('SELECT * FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(positioningVersionId);
+    if (!row) return null;
+    return {
+      positioning_version_id: row.positioning_version_id,
+      opportunity_id: row.opportunity_id,
+      jd_revision_id: row.jd_revision_id,
+      analysis_id: row.analysis_id,
+      evidence_snapshot_id: row.evidence_snapshot_id,
+      input_generation: row.input_generation,
+      version_number: row.version_number,
+      state: row.state,
+      claims: intelligenceStoredJson(row.claims_json, 'claims_json'),
+    };
+  }
+
+  return Object.freeze({
+    buildEvidenceSnapshot: buildSnapshot,
+    createInputGeneration,
+    getInputGeneration,
+    saveRequirement,
+    getRequirement: (requirementId) => run(() => readRequirement(requirementId)),
+    classifyMatch: (input) => run(() => classifyMatch(input)),
+    saveMatch,
+    getMatch: (matchId) => run(() => readMatch(matchId)),
+    validateTraceability: (input) => run(() => validateTraceability({
+      ...input,
+      snapshot: resolveEvidenceSnapshot({
+        ...input,
+        evidenceSnapshot: input?.snapshot ?? input?.evidence_snapshot ?? input?.evidenceSnapshot,
+      }),
+    })),
+    validatePositioningClaimEdges: (input) => run(() => validatePositioningClaimEdges({
+      ...input,
+      evidenceSnapshot: resolveEvidenceSnapshot(input),
+    })),
+    savePositioningVersion,
+    getPositioningVersion: (positioningVersionId) => run(() => readPositioningVersion(positioningVersionId)),
+    constants: Object.freeze({
+      claimKinds: CLAIM_KINDS,
+      explicitness: EXPLICITNESS,
+      extractionStatuses: EXTRACTION_STATUSES,
+      matchClassifications: MATCH_CLASSIFICATIONS,
+      operationTypes: OPERATION_TYPES,
+      positioningStates: POSITIONING_STATES,
+      priorities: PRIORITIES,
+      requirementTypes: REQUIREMENT_TYPES,
+    }),
+  });
+}
+
 function openFoundationStore(privateRoot, options = {}) {
   const repositoryRoot = options.repositoryRoot;
   const ownership = options.ownership;
@@ -967,10 +2269,20 @@ function initializeOpportunityEvidenceStore(privateRoot, options = {}) {
       () => closed,
     );
     assertMigrationOwnership(privateRoot, options.ownership, options);
-    return {
+    migrateIntelligenceSchema(store.database, { ...options, privateRoot });
+    assertMigrationOwnership(privateRoot, options.ownership, options);
+    const intelligence = createIntelligenceOperations(
+      store.database,
+      privateRoot,
+      options.ownership,
+      options,
+      () => closed,
+    );
+    const result = {
       metadata: {
         ...store.metadata,
         opportunityEvidenceSchemaVersion: OPPORTUNITY_EVIDENCE_SCHEMA_VERSION,
+        intelligenceSchemaVersion: INTELLIGENCE_SCHEMA_VERSION,
       },
       ...operations,
       close() {
@@ -979,18 +2291,53 @@ function initializeOpportunityEvidenceStore(privateRoot, options = {}) {
         store.close();
       },
     };
+    Object.defineProperty(result, 'intelligence', {
+      value: intelligence,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    return result;
   } catch (error) {
-    if (options.allowDegradedOnMigrationFailure && typeof error?.code === 'string' && error.code.startsWith('OPPORTUNITY_EVIDENCE_')) {
+    if (
+      options.allowDegradedOnMigrationFailure
+      && typeof error?.code === 'string'
+      && (error.code.startsWith('OPPORTUNITY_EVIDENCE_') || error.code.startsWith('INTELLIGENCE_'))
+    ) {
+      let substrateOperations;
+      try {
+        substrateOperations = createDomainOperations(
+          store.database,
+          privateRoot,
+          options.ownership,
+          options,
+          () => closed,
+        );
+      } catch {
+        substrateOperations = {};
+      }
       return {
         metadata: {
           ...store.metadata,
-          opportunityEvidenceSchemaVersion: null,
+          opportunityEvidenceSchemaVersion: error.code.startsWith('OPPORTUNITY_EVIDENCE_')
+            ? null
+            : OPPORTUNITY_EVIDENCE_SCHEMA_VERSION,
+          intelligenceSchemaVersion: error.code.startsWith('INTELLIGENCE_') ? null : undefined,
         },
-        substrateStatus: {
-          phase: 'unavailable',
-          code: error.code,
-          message: error.message,
-        },
+        ...(error.code.startsWith('INTELLIGENCE_') ? substrateOperations : {}),
+        ...(error.code.startsWith('OPPORTUNITY_EVIDENCE_') ? {
+          substrateStatus: {
+            phase: 'unavailable',
+            code: error.code,
+            message: error.message,
+          },
+        } : {
+          intelligenceStatus: {
+            phase: 'unavailable',
+            code: error.code,
+            message: error.message,
+          },
+        }),
         close() {
           if (closed) return;
           closed = true;
@@ -1007,6 +2354,7 @@ function initializeOpportunityEvidenceStore(privateRoot, options = {}) {
 module.exports = {
   FOUNDATION_STORE_VERSION,
   FoundationPersistenceError,
+  INTELLIGENCE_SCHEMA_VERSION,
   initializeFoundationStore,
   initializeOpportunityEvidenceStore,
   OPPORTUNITY_EVIDENCE_SCHEMA_VERSION,

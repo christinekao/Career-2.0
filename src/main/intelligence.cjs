@@ -1,0 +1,756 @@
+const crypto = require('node:crypto');
+
+const IDENTITY_CONTRACT_VERSION = 1;
+const MATCHING_CONTRACT_VERSION = 1;
+const GAP_CONTRACT_VERSION = 1;
+const POSITIONING_CONTRACT_VERSION = 1;
+
+const REQUIREMENT_TYPES = Object.freeze([
+  'RESPONSIBILITY',
+  'OUTCOME',
+  'SKILL',
+  'CONSTRAINT',
+  'QUALIFICATION',
+  'PREFERENCE',
+  'UNKNOWN',
+]);
+const PRIORITIES = Object.freeze(['HIGH', 'MEDIUM', 'LOW', 'UNKNOWN']);
+const EXPLICITNESS = Object.freeze(['EXPLICIT', 'INFERRED']);
+const EXTRACTION_STATUSES = Object.freeze(['EXTRACTED', 'INFERRED', 'UNAVAILABLE', 'REJECTED']);
+const UNCERTAINTY_BASES = Object.freeze(['RULE', 'MODEL', 'USER_REVIEW']);
+const MATCH_CLASSIFICATIONS = Object.freeze([
+  'DIRECT',
+  'STRONG_ADJACENT',
+  'PARTIAL',
+  'NO_MATCH',
+  'INSUFFICIENT_EVIDENCE',
+]);
+const POSITIONING_STATES = Object.freeze(['DRAFT', 'CANDIDATE', 'CONFIRMED', 'STALE', 'REJECTED']);
+const OPERATION_TYPES = Object.freeze(['ANALYZE_REQUIREMENTS', 'CLASSIFY_MATCHES', 'DRAFT_POSITIONING']);
+const CLAIM_KINDS = Object.freeze(['SUPPORTED', 'LIMITATION', 'UNKNOWN', 'FOLLOW_UP']);
+
+class IntelligenceValidationError extends Error {
+  constructor(code, message) {
+    super(message);
+    this.name = 'IntelligenceValidationError';
+    this.code = code;
+  }
+}
+
+function invalid(code, message) {
+  throw new IntelligenceValidationError(code, message);
+}
+
+function assertFiniteInteger(value, fieldName, { minimum = 0 } = {}) {
+  if (!Number.isSafeInteger(value) || value < minimum) {
+    invalid('INTELLIGENCE_INVALID_INPUT', `${fieldName} must be a safe integer >= ${minimum}.`);
+  }
+  return value;
+}
+
+function requiredText(value, fieldName) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    invalid('INTELLIGENCE_INVALID_INPUT', `${fieldName} must be a non-empty string.`);
+  }
+  return value.trim();
+}
+
+function optionalText(value, fieldName) {
+  if (value === undefined || value === null || value === '') return null;
+  return requiredText(value, fieldName);
+}
+
+function normalizeTimestamp(value, fieldName = 'requested_at') {
+  const candidate = value === undefined ? new Date().toISOString() : value;
+  if (typeof candidate !== 'string' || Number.isNaN(Date.parse(candidate))) {
+    invalid('INTELLIGENCE_INVALID_INPUT', `${fieldName} must be a valid timestamp.`);
+  }
+  return new Date(candidate).toISOString();
+}
+
+function canonicalSerialize(value) {
+  const render = (candidate) => {
+    if (candidate === null) return 'null';
+    if (typeof candidate === 'string') return JSON.stringify(candidate);
+    if (typeof candidate === 'boolean') return candidate ? 'true' : 'false';
+    if (typeof candidate === 'number') {
+      if (!Number.isFinite(candidate)) invalid('INTELLIGENCE_CANONICAL_INVALID', 'Canonical input contains a non-finite number.');
+      return Object.is(candidate, -0) ? '0' : JSON.stringify(candidate);
+    }
+    if (typeof candidate !== 'object') {
+      invalid('INTELLIGENCE_CANONICAL_INVALID', 'Canonical input contains an unsupported value.');
+    }
+    if (Array.isArray(candidate)) return `[${candidate.map(render).join(',')}]`;
+    return `{${Object.keys(candidate).sort().map((key) => `${JSON.stringify(key)}:${render(candidate[key])}`).join(',')}}`;
+  };
+  return render(value);
+}
+
+function digestCanonical(value) {
+  return crypto.createHash('sha256').update(canonicalSerialize(value), 'utf8').digest('hex');
+}
+
+function identity(prefix, value) {
+  return `${prefix}:${digestCanonical(value)}`;
+}
+
+function freezeDeep(value) {
+  if (!value || typeof value !== 'object' || Object.isFrozen(value)) return value;
+  Object.values(value).forEach(freezeDeep);
+  return Object.freeze(value);
+}
+
+function asArray(value, fieldName, { allowEmpty = false } = {}) {
+  if (!Array.isArray(value) || (!allowEmpty && value.length === 0)) {
+    invalid('INTELLIGENCE_INVALID_INPUT', `${fieldName} must be a non-empty array.`);
+  }
+  return value;
+}
+
+function orderedIds(value, fieldName, { allowEmpty = false } = {}) {
+  const values = asArray(value, fieldName, { allowEmpty });
+  const result = values.map((item) => requiredText(item, `${fieldName}[]`));
+  if (new Set(result).size !== result.length) {
+    invalid('INTELLIGENCE_DUPLICATE_ID', `${fieldName} must not contain duplicate identities.`);
+  }
+  return result;
+}
+
+function buildAnalysisId({ opportunityId, jdRevisionId, analysisGeneration }) {
+  const generation = analysisGeneration === undefined || analysisGeneration === null
+    ? invalid('INTELLIGENCE_INVALID_INPUT', 'analysis_generation must be provided.')
+    : requiredText(String(analysisGeneration), 'analysis_generation');
+  return `analysis:${requiredText(opportunityId, 'opportunity_id')}:${requiredText(jdRevisionId, 'jd_revision_id')}:${generation}`;
+}
+
+function buildEvidenceSnapshotId({ contractVersion = IDENTITY_CONTRACT_VERSION, evidenceRevisionIds, inputGeneration }) {
+  const ids = orderedIds(evidenceRevisionIds, 'evidence_revision_ids');
+  // Preserve the application-owned generation so a re-evaluation cannot reuse
+  // a relation identity from an older current input even when revision IDs repeat.
+  return identity('evidence_snapshot', {
+    contract_version: assertFiniteInteger(contractVersion, 'contract_version', { minimum: 1 }),
+    evidence_revision_ids: ids,
+    input_generation: inputGeneration === undefined || inputGeneration === null ? null : String(inputGeneration),
+  });
+}
+
+function buildRequirementId({ contractVersion = IDENTITY_CONTRACT_VERSION, jdRevisionId, sourceRef, normalizedContent, requirementType }) {
+  return identity('requirement', {
+    contract_version: assertFiniteInteger(contractVersion, 'contract_version', { minimum: 1 }),
+    jd_revision_id: requiredText(jdRevisionId, 'jd_revision_id'),
+    source_ref: normalizeSourceRef(sourceRef),
+    normalized_content: requiredText(normalizedContent, 'normalized_content'),
+    requirement_type: requireEnum(requirementType, REQUIREMENT_TYPES, 'requirement_type'),
+  });
+}
+
+function buildMatchId({ contractVersion = MATCHING_CONTRACT_VERSION, jdRevisionId, requirementId, evidenceSnapshotId }) {
+  return identity('match', {
+    contract_version: assertFiniteInteger(contractVersion, 'contract_version', { minimum: 1 }),
+    jd_revision_id: requiredText(jdRevisionId, 'jd_revision_id'),
+    requirement_id: requiredText(requirementId, 'requirement_id'),
+    evidence_snapshot_id: requiredText(evidenceSnapshotId, 'evidence_snapshot_id'),
+  });
+}
+
+function buildGapId({ contractVersion = GAP_CONTRACT_VERSION, jdRevisionId, requirementId, evidenceSnapshotId }) {
+  return identity('gap', {
+    gap_contract: 'gap',
+    contract_version: assertFiniteInteger(contractVersion, 'contract_version', { minimum: 1 }),
+    jd_revision_id: requiredText(jdRevisionId, 'jd_revision_id'),
+    requirement_id: requiredText(requirementId, 'requirement_id'),
+    evidence_snapshot_id: requiredText(evidenceSnapshotId, 'evidence_snapshot_id'),
+  });
+}
+
+function buildPositioningVersionId({ opportunityId, versionNumber }) {
+  return `pos:${requiredText(opportunityId, 'opportunity_id')}:${assertFiniteInteger(versionNumber, 'version_number', { minimum: 1 })}`;
+}
+
+function buildPositioningClaimId({ positioningVersionId, ordinal }) {
+  return `${requiredText(positioningVersionId, 'positioning_version_id')}:claim:${assertFiniteInteger(ordinal, 'claim_ordinal', { minimum: 1 })}`;
+}
+
+function requireEnum(value, allowed, fieldName) {
+  if (!allowed.includes(value)) invalid('INTELLIGENCE_UNKNOWN_STATE', `${fieldName} is not an accepted finite value.`);
+  return value;
+}
+
+function normalizeSourceRef(value) {
+  if (typeof value === 'string') {
+    const text = value.trim();
+    if (!text || /\s/.test(text) || !/^(?:jd|line|offset|section|paragraph|char|anchor|unavailable):.+/i.test(text)) {
+      invalid('INTELLIGENCE_SOURCE_ANCHOR_INVALID', 'source_ref must be a deterministic JD source anchor.');
+    }
+    return text;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    invalid('INTELLIGENCE_SOURCE_ANCHOR_INVALID', 'source_ref must identify a deterministic JD source anchor.');
+  }
+  const copy = { ...value };
+  const locator = copy.locator ?? copy.anchor ?? copy.source;
+  if (typeof locator !== 'string' || locator.trim() === '' || /\s/.test(locator) || !/^(?:jd|line|offset|section|paragraph|char|anchor|unavailable):.+/i.test(locator.trim())) {
+    invalid('INTELLIGENCE_SOURCE_ANCHOR_INVALID', 'source_ref object must contain a deterministic locator.');
+  }
+  if (copy.start !== undefined) assertFiniteInteger(copy.start, 'source_ref.start', { minimum: 0 });
+  if (copy.end !== undefined) assertFiniteInteger(copy.end, 'source_ref.end', { minimum: 0 });
+  if (copy.start !== undefined && copy.end !== undefined && copy.end < copy.start) {
+    invalid('INTELLIGENCE_SOURCE_ANCHOR_INVALID', 'source_ref.end must not precede source_ref.start.');
+  }
+  return JSON.parse(canonicalSerialize(copy));
+}
+
+function normalizeUncertainty(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    invalid('INTELLIGENCE_UNCERTAINTY_INVALID', 'uncertainty must be a structured object.');
+  }
+  const signalType = value.signal_type ?? value.signalType;
+  const basis = value.basis;
+  const numericValue = value.value;
+  if (signalType !== 'EXTRACTION_UNCERTAINTY') {
+    invalid('INTELLIGENCE_UNCERTAINTY_INVALID', 'uncertainty.signal_type is invalid.');
+  }
+  if (typeof numericValue !== 'number' || !Number.isFinite(numericValue) || numericValue < 0 || numericValue > 1) {
+    invalid('INTELLIGENCE_UNCERTAINTY_INVALID', 'uncertainty.value must be a finite decimal from 0 through 1.');
+  }
+  requireEnum(basis, UNCERTAINTY_BASES, 'uncertainty.basis');
+  return { signal_type: signalType, value: numericValue, basis };
+}
+
+function validateRequirement(input = {}) {
+  const contractVersion = input.contract_version ?? input.contractVersion ?? IDENTITY_CONTRACT_VERSION;
+  const jdRevisionId = requiredText(input.jd_revision_id ?? input.jdRevisionId, 'jd_revision_id');
+  const sourceRef = normalizeSourceRef(input.source_ref ?? input.sourceRef);
+  const normalizedContent = requiredText(input.normalized_content ?? input.normalizedContent, 'normalized_content');
+  const requirementType = requireEnum(input.requirement_type ?? input.requirementType, REQUIREMENT_TYPES, 'requirement_type');
+  const priority = requireEnum(input.priority, PRIORITIES, 'priority');
+  const explicitness = requireEnum(input.explicitness, EXPLICITNESS, 'explicitness');
+  const extractionStatus = requireEnum(input.extraction_status ?? input.extractionStatus, EXTRACTION_STATUSES, 'extraction_status');
+  const uncertainty = normalizeUncertainty(input.uncertainty);
+  const requirementId = buildRequirementId({
+    contractVersion,
+    jdRevisionId,
+    sourceRef,
+    normalizedContent,
+    requirementType,
+  });
+  const suppliedId = input.requirement_id ?? input.requirementId;
+  if (suppliedId !== undefined && suppliedId !== requirementId) {
+    invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'requirement_id does not match immutable requirement inputs.');
+  }
+  const sourceLocator = typeof sourceRef === 'string' ? sourceRef : sourceRef.locator ?? sourceRef.anchor ?? sourceRef.source;
+  const sourceUnavailable = typeof sourceLocator === 'string' && /^unavailable:/i.test(sourceLocator);
+  const ready = !sourceUnavailable && extractionStatus !== 'UNAVAILABLE' && extractionStatus !== 'REJECTED';
+  return freezeDeep({
+    requirement_id: requirementId,
+    jd_revision_id: jdRevisionId,
+    source_ref: sourceRef,
+    normalized_content: normalizedContent,
+    requirement_type: requirementType,
+    priority,
+    explicitness,
+    uncertainty,
+    extraction_status: extractionStatus,
+    contract_version: assertFiniteInteger(contractVersion, 'contract_version', { minimum: 1 }),
+    ready,
+  });
+}
+
+function evidenceRevisionObject(revision) {
+  if (!revision || typeof revision !== 'object' || Array.isArray(revision)) {
+    invalid('INTELLIGENCE_EVIDENCE_INELIGIBLE', 'Evidence revision is missing.');
+  }
+  const evidenceRevisionId = requiredText(revision.evidence_revision_id ?? revision.evidenceRevisionId, 'evidence_revision_id');
+  const evidenceId = requiredText(revision.evidence_id ?? revision.evidenceId, 'evidence_id');
+  const confirmationState = revision.confirmation_state ?? revision.confirmationState;
+  if (confirmationState !== 'CONFIRMED') {
+    invalid('INTELLIGENCE_EVIDENCE_INELIGIBLE', `Evidence revision ${evidenceRevisionId} is not CONFIRMED.`);
+  }
+  const provenance = revision.provenance ?? (revision.provenance_json ? parseJson(revision.provenance_json, 'provenance_json') : null);
+  if (!provenance || typeof provenance !== 'object' || Array.isArray(provenance) || Object.keys(provenance).length === 0) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', `Evidence revision ${evidenceRevisionId} has invalid provenance.`);
+  }
+  const factualContent = requiredText(revision.factual_content ?? revision.factualContent, 'factual_content');
+  const responsibilityBoundary = requiredText(revision.responsibility_boundary ?? revision.responsibilityBoundary, 'responsibility_boundary');
+  const outcome = requiredText(revision.outcome, 'outcome');
+  return {
+    evidence_revision_id: evidenceRevisionId,
+    evidence_id: evidenceId,
+    confirmation_state: confirmationState,
+    provenance: JSON.parse(canonicalSerialize(provenance)),
+    factual_content: factualContent,
+    responsibility_boundary: responsibilityBoundary,
+    outcome,
+  };
+}
+
+function parseJson(value, fieldName) {
+  try {
+    return JSON.parse(value);
+  } catch {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', `${fieldName} is not valid JSON.`);
+  }
+}
+
+function buildEvidenceSnapshot(input = {}) {
+  const ids = orderedIds(input.evidence_revision_ids ?? input.evidenceRevisionIds, 'evidence_revision_ids');
+  const revisions = asArray(input.evidence_revisions ?? input.evidenceRevisions, 'evidence_revisions');
+  const byId = new Map();
+  revisions.forEach((revision) => {
+    const normalized = evidenceRevisionObject(revision);
+    if (byIdHasDuplicate(byId, normalized.evidence_revision_id)) {
+      invalid('INTELLIGENCE_DUPLICATE_ID', `Duplicate Evidence revision ${normalized.evidence_revision_id}.`);
+    }
+    byId.set(normalized.evidence_revision_id, normalized);
+  });
+  const selected = ids.map((id) => {
+    const revision = byId.get(id);
+    if (!revision) invalid('INTELLIGENCE_EVIDENCE_REVISION_MISSING', `Evidence revision ${id} is missing.`);
+    return revision;
+  });
+  const expectedEvidenceId = input.expected_evidence_id ?? input.expectedEvidenceId;
+  const evidenceId = expectedEvidenceId ? requiredText(expectedEvidenceId, 'expected_evidence_id') : selected[0].evidence_id;
+  if (selected.some((revision) => revision.evidence_id !== evidenceId)) {
+    invalid('INTELLIGENCE_EVIDENCE_IDENTITY_MISMATCH', 'Selected Evidence revisions do not belong to one expected Evidence identity.');
+  }
+  const rawGeneration = input.input_generation ?? input.inputGeneration;
+  if (rawGeneration === undefined || rawGeneration === null) invalid('INTELLIGENCE_INVALID_INPUT', 'input_generation must be provided.');
+  const inputGeneration = requiredText(String(rawGeneration), 'input_generation');
+  const contractVersion = input.contract_version ?? input.contractVersion ?? IDENTITY_CONTRACT_VERSION;
+  const snapshot = {
+    evidence_snapshot_id: buildEvidenceSnapshotId({ contractVersion, evidenceRevisionIds: ids, inputGeneration }),
+    contract_version: assertFiniteInteger(contractVersion, 'contract_version', { minimum: 1 }),
+    evidence_id: evidenceId,
+    evidence_revision_ids: ids,
+    evidence_revisions: selected,
+    input_generation: inputGeneration,
+  };
+  return freezeDeep(snapshot);
+}
+
+function byIdHasDuplicate(map, id) {
+  return map.has(id);
+}
+
+function validateSnapshot(snapshot) {
+  if (!snapshot || typeof snapshot !== 'object') invalid('INTELLIGENCE_EVIDENCE_INELIGIBLE', 'Evidence snapshot is missing.');
+  const rebuilt = buildEvidenceSnapshot({
+    contractVersion: snapshot.contract_version ?? snapshot.contractVersion,
+    evidenceRevisionIds: snapshot.evidence_revision_ids ?? snapshot.evidenceRevisionIds,
+    evidenceRevisions: snapshot.evidence_revisions ?? snapshot.evidenceRevisions,
+    expectedEvidenceId: snapshot.evidence_id ?? snapshot.evidenceId,
+    inputGeneration: snapshot.input_generation ?? snapshot.inputGeneration,
+  });
+  const suppliedId = snapshot.evidence_snapshot_id ?? snapshot.evidenceSnapshotId;
+  if (suppliedId !== rebuilt.evidence_snapshot_id) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'evidence_snapshot_id does not match immutable snapshot inputs.');
+  return rebuilt;
+}
+
+function buildInputBundle(input = {}) {
+  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  const opportunityId = requiredText(input.opportunity_id ?? input.opportunityId, 'opportunity_id');
+  const jdRevisionId = requiredText(input.jd_revision_id ?? input.jdRevisionId, 'jd_revision_id');
+  const operationType = requireEnum(input.operation_type ?? input.operationType, OPERATION_TYPES, 'operation_type');
+  const schemaVersion = input.schema_version ?? input.schemaVersion ?? 1;
+  const executionId = requiredText(input.execution_id ?? input.executionId, 'execution_id');
+  const idempotencyKey = requiredText(input.idempotency_key ?? input.idempotencyKey, 'idempotency_key');
+  const rawGeneration = input.input_generation ?? input.inputGeneration;
+  if (rawGeneration === undefined || rawGeneration === null) invalid('INTELLIGENCE_INVALID_INPUT', 'input_generation must be provided.');
+  const inputGeneration = requiredText(String(rawGeneration), 'input_generation');
+  const requestedAt = normalizeTimestamp(input.requested_at ?? input.requestedAt);
+  const disclosureClassification = requiredText(input.disclosure_classification ?? input.disclosureClassification, 'disclosure_classification');
+  if (snapshot.input_generation !== inputGeneration) invalid('INTELLIGENCE_GENERATION_MISMATCH', 'Input generation does not match Evidence snapshot generation.');
+  const suppliedAnalysisGeneration = input.analysis_generation ?? input.analysisGeneration;
+  if (suppliedAnalysisGeneration !== undefined && String(suppliedAnalysisGeneration) !== inputGeneration) {
+    invalid('INTELLIGENCE_GENERATION_MISMATCH', 'analysis_generation must match input_generation.');
+  }
+  const analysisGeneration = inputGeneration;
+  const bundle = {
+    analysis_id: buildAnalysisId({ opportunityId, jdRevisionId, analysisGeneration }),
+    opportunity_id: opportunityId,
+    jd_revision_id: jdRevisionId,
+    evidence_snapshot_id: snapshot.evidence_snapshot_id,
+    evidence_revision_ids: snapshot.evidence_revision_ids,
+    operation_type: operationType,
+    schema_version: assertFiniteInteger(schemaVersion, 'schema_version', { minimum: 1 }),
+    execution_id: executionId,
+    idempotency_key: idempotencyKey,
+    input_generation: inputGeneration,
+    requested_at: requestedAt,
+    disclosure_classification: disclosureClassification,
+  };
+  return freezeDeep(bundle);
+}
+
+function hasOwn(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+
+function readAliased(value, snake, camel) {
+  if (hasOwn(value, snake)) return value[snake];
+  if (camel && hasOwn(value, camel)) return value[camel];
+  return undefined;
+}
+
+function normalizeEvaluation(input = {}) {
+  const value = input.evaluation ?? input;
+  const readBoolean = (snake, camel, fallback = false) => {
+    const candidate = readAliased(value, snake, camel);
+    if (candidate === undefined) return fallback;
+    if (typeof candidate !== 'boolean') invalid('INTELLIGENCE_MATCH_INVALID', `${snake} must be boolean.`);
+    return candidate;
+  };
+  const rawMissingDimensions = readAliased(value, 'missing_dimensions', 'missingDimensions');
+  const missingDimensions = rawMissingDimensions === undefined ? [] : rawMissingDimensions;
+  if (!Array.isArray(missingDimensions)) invalid('INTELLIGENCE_MATCH_INVALID', 'missing_dimensions must be an array.');
+  const rawEvidenceAvailable = readAliased(value, 'evidence_available', 'evidenceAvailable');
+  const evidenceAvailable = rawEvidenceAvailable === undefined ? true : rawEvidenceAvailable;
+  if (typeof evidenceAvailable !== 'boolean') invalid('INTELLIGENCE_MATCH_INVALID', 'evidence_available must be boolean.');
+  return {
+    complete_support: readBoolean('complete_support', 'completeSupport'),
+    adjacent_support: readBoolean('adjacent_support', 'adjacentSupport'),
+    partial_support: readBoolean('partial_support', 'partialSupport'),
+    evidence_complete: readBoolean('evidence_complete', 'evidenceComplete'),
+    ambiguous: readBoolean('ambiguous', 'isAmbiguous'),
+    evidence_available: evidenceAvailable,
+    supported_evidence_revision_ids: (() => {
+      const raw = readAliased(value, 'supported_evidence_revision_ids', 'supportedEvidenceRevisionIds');
+      return raw === undefined ? [] : raw;
+    })(),
+    missing_dimensions: missingDimensions,
+    boundary: hasOwn(value, 'boundary') ? value.boundary : undefined,
+    explanation: hasOwn(value, 'explanation') ? value.explanation : undefined,
+  };
+}
+
+const DECISION_FACT_FIELDS = Object.freeze([
+  'complete_support',
+  'adjacent_support',
+  'partial_support',
+  'evidence_complete',
+  'ambiguous',
+  'evidence_available',
+]);
+
+function normalizeDecisionFacts(input = {}) {
+  const raw = readAliased(input, 'decision_facts', 'decisionFacts');
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'decision_facts must be a structured decision record.');
+  }
+  const facts = {};
+  for (const field of DECISION_FACT_FIELDS) {
+    const camel = field.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase());
+    if (!hasOwn(raw, field) && !hasOwn(raw, camel)) {
+      invalid('INTELLIGENCE_MATCH_INVALID', `decision_facts.${field} must be provided.`);
+    }
+    const value = hasOwn(raw, field) ? raw[field] : raw[camel];
+    if (typeof value !== 'boolean') invalid('INTELLIGENCE_MATCH_INVALID', `decision_facts.${field} must be boolean.`);
+    facts[field] = value;
+  }
+  return facts;
+}
+
+function deriveClassification({ decisionFacts, evidenceIds, missingDimensions }) {
+  if (decisionFacts.ambiguous || decisionFacts.evidence_available === false) return 'INSUFFICIENT_EVIDENCE';
+  if (decisionFacts.evidence_complete && decisionFacts.complete_support && evidenceIds.length > 0 && missingDimensions.length === 0) return 'DIRECT';
+  if (decisionFacts.evidence_complete && decisionFacts.adjacent_support && evidenceIds.length > 0) return 'STRONG_ADJACENT';
+  if (decisionFacts.evidence_complete && decisionFacts.partial_support && evidenceIds.length > 0 && missingDimensions.length > 0) return 'PARTIAL';
+  if (decisionFacts.evidence_complete) return 'NO_MATCH';
+  return 'INSUFFICIENT_EVIDENCE';
+}
+
+function classifyMatch(input = {}) {
+  const requirement = validateRequirement(input.requirement);
+  if (!requirement.ready) invalid('INTELLIGENCE_REQUIREMENT_NOT_READY', 'Requirement is not ready for matching.');
+  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  const evaluation = normalizeEvaluation(input);
+  const evidenceIds = orderedIds(evaluation.supported_evidence_revision_ids, 'supported_evidence_revision_ids', { allowEmpty: true });
+  if (evidenceIds.some((id) => !snapshot.evidence_revision_ids.includes(id))) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match references Evidence outside its immutable snapshot.');
+  }
+  const requestedClassification = input.classification;
+  if (requestedClassification !== undefined && !MATCH_CLASSIFICATIONS.includes(requestedClassification)) {
+    invalid('INTELLIGENCE_UNKNOWN_TAXONOMY', 'Match classification is outside the accepted taxonomy.');
+  }
+  const decisionFacts = {
+    complete_support: evaluation.complete_support,
+    adjacent_support: evaluation.adjacent_support,
+    partial_support: evaluation.partial_support,
+    evidence_complete: evaluation.evidence_complete,
+    ambiguous: evaluation.ambiguous,
+    evidence_available: evaluation.evidence_available,
+  };
+  const derivedClassification = deriveClassification({ decisionFacts, evidenceIds, missingDimensions: evaluation.missing_dimensions });
+  if (requestedClassification !== undefined && requestedClassification !== derivedClassification) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'classification does not match the validated decision facts.');
+  }
+  const classification = derivedClassification;
+  const explanation = optionalText(evaluation.explanation, 'explanation');
+  if (classification === 'DIRECT') {
+    if (!evaluation.evidence_available || !evaluation.evidence_complete || !evaluation.complete_support || evidenceIds.length === 0 || evaluation.missing_dimensions.length > 0 || evaluation.ambiguous) {
+      invalid('INTELLIGENCE_MATCH_INVALID', 'DIRECT requires complete, unambiguous material support.');
+    }
+  } else if (classification === 'STRONG_ADJACENT') {
+    if (!evaluation.evidence_available || !evaluation.evidence_complete || !evaluation.adjacent_support || evidenceIds.length === 0 || !optionalText(evaluation.boundary, 'boundary')) {
+      invalid('INTELLIGENCE_MATCH_INVALID', 'STRONG_ADJACENT requires transferable support and an explicit boundary.');
+    }
+  } else if (classification === 'PARTIAL') {
+    if (!evaluation.evidence_available || !evaluation.evidence_complete || !evaluation.partial_support || evidenceIds.length === 0 || evaluation.missing_dimensions.length === 0) {
+      invalid('INTELLIGENCE_MATCH_INVALID', 'PARTIAL requires supported material dimensions and missing dimensions.');
+    }
+  } else if (classification === 'NO_MATCH') {
+    if (!evaluation.evidence_complete || evaluation.ambiguous || evaluation.complete_support || evaluation.adjacent_support || evaluation.partial_support) {
+      invalid('INTELLIGENCE_MATCH_INVALID', 'NO_MATCH requires complete evaluation and no supported relation.');
+    }
+  } else if (classification === 'INSUFFICIENT_EVIDENCE' && !evaluation.ambiguous && evaluation.evidence_available !== false && evaluation.evidence_complete) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'INSUFFICIENT_EVIDENCE requires an unsafe or incomplete evaluation.');
+  }
+  const matchId = buildMatchId({
+    jdRevisionId: requirement.jd_revision_id,
+    requirementId: requirement.requirement_id,
+    evidenceSnapshotId: snapshot.evidence_snapshot_id,
+  });
+  const result = {
+    match_id: matchId,
+    gap_id: classification === 'DIRECT' ? null : buildGapId({
+      jdRevisionId: requirement.jd_revision_id,
+      requirementId: requirement.requirement_id,
+      evidenceSnapshotId: snapshot.evidence_snapshot_id,
+    }),
+    jd_revision_id: requirement.jd_revision_id,
+    requirement_id: requirement.requirement_id,
+    evidence_snapshot_id: snapshot.evidence_snapshot_id,
+    input_generation: snapshot.input_generation,
+    classification,
+    decision_facts: decisionFacts,
+    evidence_revision_ids: evidenceIds,
+    missing_dimensions: [...evaluation.missing_dimensions].map((item) => requiredText(item, 'missing_dimensions[]')),
+    explanation: explanation || (classification === 'NO_MATCH' ? 'Complete evaluation found no supported relation.' : 'Evaluation remains limited by available evidence.'),
+    ...(classification === 'STRONG_ADJACENT' ? { boundary: optionalText(evaluation.boundary, 'boundary') } : {}),
+  };
+  return freezeDeep(result);
+}
+
+function validateMatchRecord(input = {}, snapshot) {
+  if (!MATCH_CLASSIFICATIONS.includes(input.classification)) invalid('INTELLIGENCE_UNKNOWN_TAXONOMY', 'Match classification is outside the accepted taxonomy.');
+  const fixedSnapshot = validateSnapshot(snapshot);
+  if (input.evidence_snapshot_id !== undefined && input.evidence_snapshot_id !== fixedSnapshot.evidence_snapshot_id) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match Evidence snapshot does not match the immutable snapshot.');
+  }
+  if (input.input_generation !== undefined && input.input_generation !== fixedSnapshot.input_generation) {
+    invalid('INTELLIGENCE_GENERATION_MISMATCH', 'Match input generation does not match the immutable snapshot.');
+  }
+  const expectedMatchId = buildMatchId({
+    jdRevisionId: input.jd_revision_id,
+    requirementId: input.requirement_id,
+    evidenceSnapshotId: fixedSnapshot.evidence_snapshot_id,
+  });
+  if (input.match_id !== expectedMatchId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'match_id does not match immutable inputs.');
+  const evidenceIds = orderedIds(input.evidence_revision_ids, 'evidence_revision_ids', { allowEmpty: true });
+  if (evidenceIds.some((id) => !fixedSnapshot.evidence_revision_ids.includes(id))) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match Evidence is outside its snapshot.');
+  const explanation = requiredText(input.explanation, 'explanation');
+  const missingDimensions = orderedIds(input.missing_dimensions ?? [], 'missing_dimensions', { allowEmpty: true });
+  const decisionFacts = normalizeDecisionFacts(input);
+  const expectedClassification = deriveClassification({ decisionFacts, evidenceIds, missingDimensions });
+  if (input.classification !== expectedClassification) invalid('INTELLIGENCE_MATCH_INVALID', 'classification does not match the persisted decision facts.');
+  const suppliedGapId = input.gap_id ?? input.gapId ?? null;
+  if (input.classification === 'DIRECT' && (evidenceIds.length === 0 || missingDimensions.length > 0 || suppliedGapId !== null)) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'DIRECT requires confirmed Evidence references and no material limitation.');
+  }
+  if (input.classification === 'STRONG_ADJACENT' && (evidenceIds.length === 0 || !optionalText(input.boundary, 'boundary'))) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'STRONG_ADJACENT requires confirmed Evidence references and an explicit boundary.');
+  }
+  if (input.classification === 'PARTIAL' && (evidenceIds.length === 0 || missingDimensions.length === 0)) {
+    invalid('INTELLIGENCE_MATCH_INVALID', 'PARTIAL requires confirmed Evidence references and missing dimensions.');
+  }
+  const gapId = input.classification === 'DIRECT' ? null : buildGapId({
+    jdRevisionId: input.jd_revision_id,
+    requirementId: input.requirement_id,
+    evidenceSnapshotId: fixedSnapshot.evidence_snapshot_id,
+  });
+  if (input.classification !== 'DIRECT' && suppliedGapId !== gapId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'gap_id does not match immutable inputs.');
+  return freezeDeep({
+    match_id: input.match_id,
+    gap_id: gapId,
+    jd_revision_id: input.jd_revision_id,
+    requirement_id: input.requirement_id,
+    evidence_snapshot_id: fixedSnapshot.evidence_snapshot_id,
+    input_generation: fixedSnapshot.input_generation,
+    classification: input.classification,
+    decision_facts: decisionFacts,
+    evidence_revision_ids: evidenceIds,
+    missing_dimensions: missingDimensions,
+    explanation,
+    ...(input.classification === 'STRONG_ADJACENT' ? { boundary: optionalText(input.boundary, 'boundary') } : {}),
+  });
+}
+
+function validateTraceability({ jdSourceRef, jdRevisionId, requirement, match, snapshot }) {
+  const validRequirement = validateRequirement(requirement);
+  const fixedSnapshot = validateSnapshot(snapshot);
+  const validMatch = validateMatchRecord(match, fixedSnapshot);
+  if (validRequirement.jd_revision_id !== requiredText(jdRevisionId, 'jd_revision_id')) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Requirement JD revision does not match provenance chain.');
+  if (validMatch.requirement_id !== validRequirement.requirement_id || validMatch.jd_revision_id !== validRequirement.jd_revision_id) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Match does not resolve to its requirement and JD revision.');
+  }
+  const sourceRef = jdSourceRef === undefined ? validRequirement.source_ref : normalizeSourceRef(jdSourceRef);
+  if (canonicalSerialize(sourceRef) !== canonicalSerialize(validRequirement.source_ref)) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'JD source anchor does not resolve to the requirement source anchor.');
+  }
+  const edges = [
+    { edge_type: 'JD_SOURCE_TO_REVISION', jd_source_ref: sourceRef, jd_revision_id: validRequirement.jd_revision_id },
+    { edge_type: 'REVISION_TO_REQUIREMENT', jd_revision_id: validRequirement.jd_revision_id, requirement_id: validRequirement.requirement_id },
+    { edge_type: validMatch.gap_id ? 'REQUIREMENT_TO_GAP' : 'REQUIREMENT_TO_MATCH', requirement_id: validRequirement.requirement_id, match_id: validMatch.match_id, gap_id: validMatch.gap_id },
+  ];
+  for (const evidenceRevisionId of validMatch.evidence_revision_ids) {
+    edges.push({ edge_type: 'MATCH_TO_CONFIRMED_EVIDENCE', match_id: validMatch.match_id, gap_id: validMatch.gap_id, evidence_revision_id: evidenceRevisionId });
+  }
+  return freezeDeep({
+    jd_source_ref: sourceRef,
+    jd_revision_id: validRequirement.jd_revision_id,
+    requirement_id: validRequirement.requirement_id,
+    match_id: validMatch.match_id,
+    gap_id: validMatch.gap_id,
+    evidence_revision_ids: validMatch.evidence_revision_ids,
+    input_generation: fixedSnapshot.input_generation,
+    provenance_edges: edges,
+  });
+}
+
+function validatePositioningClaimEdges(input = {}) {
+  const positioningVersionId = requiredText(input.positioning_version_id ?? input.positioningVersionId, 'positioning_version_id');
+  const requirements = new Map(asArray(input.requirements, 'requirements').map((item) => {
+    const requirement = validateRequirement(item);
+    return [requirement.requirement_id, requirement];
+  }));
+  const rawMatches = asArray(input.matches, 'matches', { allowEmpty: true });
+  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  const matches = new Map(rawMatches.map((item) => {
+    const match = validateMatchRecord(item, snapshot);
+    return [match.match_id, match];
+  }));
+  const gaps = new Map([...matches.values()].map((item) => [item.gap_id, item]).filter(([key]) => key));
+  const claims = asArray(input.claims, 'claims');
+  const normalizedClaims = claims.map((claim, index) => {
+    const ordinal = claim.ordinal ?? claim.claim_ordinal ?? index + 1;
+    const requirementId = requiredText(claim.requirement_id ?? claim.requirementId, 'requirement_id');
+    if (!requirements.has(requirementId)) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim requirement edge is missing.');
+    const matchId = claim.match_id ?? claim.matchId ?? null;
+    const gapId = claim.gap_id ?? claim.gapId ?? null;
+    if ((matchId && gapId) || (!matchId && !gapId)) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim must reference exactly one match or gap edge.');
+    const source = matchId ? matches.get(matchId) : gaps.get(gapId);
+    if (!source || source.requirement_id !== requirementId) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim edge does not resolve to its requirement.');
+    if (source.evidence_snapshot_id !== snapshot.evidence_snapshot_id || source.input_generation !== snapshot.input_generation) {
+      invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim source does not resolve to its immutable snapshot generation.');
+    }
+    if (matchId && source.classification !== 'DIRECT') {
+      invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Non-direct relations must be referenced through their gap edge.');
+    }
+    const evidenceRevisionIds = orderedIds(claim.evidence_revision_ids ?? source.evidence_revision_ids ?? [], 'evidence_revision_ids', { allowEmpty: true });
+    const sourceEvidenceIds = orderedIds(source.evidence_revision_ids ?? [], 'source.evidence_revision_ids', { allowEmpty: true });
+    if (canonicalSerialize(evidenceRevisionIds) !== canonicalSerialize(sourceEvidenceIds)) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim Evidence edges do not match its source relation.');
+    if (evidenceRevisionIds.some((id) => !snapshot.evidence_revision_ids.includes(id))) invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning claim references Evidence outside its snapshot.');
+    const claimKind = claim.claim_kind ?? claim.claimKind ?? (gapId ? 'LIMITATION' : 'SUPPORTED');
+    requireEnum(claimKind, CLAIM_KINDS, 'claim_kind');
+    if (hasOwn(claim, 'verified') && typeof claim.verified !== 'boolean') {
+      invalid('INTELLIGENCE_CLAIM_INVALID', 'verified must be boolean.');
+    }
+    if (gapId && (!['LIMITATION', 'UNKNOWN', 'FOLLOW_UP'].includes(claimKind) || claim.verified === true)) invalid('INTELLIGENCE_GAP_CLAIM_INVALID', 'Gap-based claims must remain explicit limitations, unknowns, or follow-up needs.');
+    if (matchId && (source.classification !== 'DIRECT' || claimKind !== 'SUPPORTED' || claim.verified === false)) invalid('INTELLIGENCE_MATCH_INVALID', 'Supported claims must resolve to a direct match with confirmed Evidence.');
+    const claimId = buildPositioningClaimId({ positioningVersionId, ordinal });
+    const suppliedId = claim.positioning_claim_id ?? claim.positioningClaimId;
+    if (suppliedId !== undefined && suppliedId !== claimId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'positioning_claim_id does not match version and ordinal.');
+    return {
+      positioning_claim_id: claimId,
+      positioning_version_id: positioningVersionId,
+      ordinal: assertFiniteInteger(ordinal, 'claim_ordinal', { minimum: 1 }),
+      requirement_id: requirementId,
+      match_id: matchId,
+      gap_id: gapId,
+      evidence_revision_ids: evidenceRevisionIds,
+      claim_kind: claimKind,
+      claim_text: requiredText(claim.claim_text ?? claim.claimText, 'claim_text'),
+      verified: gapId ? false : claim.verified !== false,
+    };
+  });
+  if (new Set(normalizedClaims.map((claim) => claim.ordinal)).size !== normalizedClaims.length) invalid('INTELLIGENCE_DUPLICATE_ID', 'Positioning claim ordinals must be unique.');
+  return freezeDeep(normalizedClaims);
+}
+
+function validatePositioningVersion(input = {}) {
+  const opportunityId = requiredText(input.opportunity_id ?? input.opportunityId, 'opportunity_id');
+  const jdRevisionId = requiredText(input.jd_revision_id ?? input.jdRevisionId, 'jd_revision_id');
+  const analysisId = requiredText(input.analysis_id ?? input.analysisId, 'analysis_id');
+  const snapshot = validateSnapshot(input.evidence_snapshot ?? input.evidenceSnapshot);
+  if (input.evidence_snapshot_id !== undefined && input.evidence_snapshot_id !== snapshot.evidence_snapshot_id) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning Evidence snapshot does not match the immutable snapshot.');
+  }
+  if (input.input_generation !== undefined && input.input_generation !== snapshot.input_generation) {
+    invalid('INTELLIGENCE_GENERATION_MISMATCH', 'Positioning input generation does not match the immutable snapshot.');
+  }
+  const state = requireEnum(input.state, POSITIONING_STATES, 'state');
+  const versionNumber = assertFiniteInteger(input.version_number ?? input.versionNumber, 'version_number', { minimum: 1 });
+  const positioningVersionId = buildPositioningVersionId({ opportunityId, versionNumber });
+  const suppliedId = input.positioning_version_id ?? input.positioningVersionId;
+  if (suppliedId !== undefined && suppliedId !== positioningVersionId) invalid('INTELLIGENCE_IDENTITY_MISMATCH', 'positioning_version_id does not match opportunity and version number.');
+  if (asArray(input.requirements, 'requirements').some((requirement) => (requirement.jd_revision_id ?? requirement.jdRevisionId) !== jdRevisionId)) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning requirements do not resolve to the selected JD revision.');
+  }
+  if (asArray(input.matches, 'matches', { allowEmpty: true }).some((match) => match.jd_revision_id !== jdRevisionId)) {
+    invalid('INTELLIGENCE_PROVENANCE_INVALID', 'Positioning relations do not resolve to the selected JD revision.');
+  }
+  const claims = validatePositioningClaimEdges({
+    positioningVersionId,
+    claims: input.claims,
+    requirements: input.requirements,
+    matches: input.matches,
+    evidenceSnapshot: snapshot,
+  });
+  return freezeDeep({
+    positioning_version_id: positioningVersionId,
+    opportunity_id: opportunityId,
+    jd_revision_id: jdRevisionId,
+    analysis_id: analysisId,
+    evidence_snapshot_id: snapshot.evidence_snapshot_id,
+    input_generation: snapshot.input_generation,
+    version_number: versionNumber,
+    state,
+    claims,
+  });
+}
+
+module.exports = {
+  CLAIM_KINDS,
+  EXPLICITNESS,
+  EXTRACTION_STATUSES,
+  GAP_CONTRACT_VERSION,
+  IDENTITY_CONTRACT_VERSION,
+  IntelligenceValidationError,
+  MATCH_CLASSIFICATIONS,
+  MATCHING_CONTRACT_VERSION,
+  OPERATION_TYPES,
+  POSITIONING_CONTRACT_VERSION,
+  POSITIONING_STATES,
+  PRIORITIES,
+  REQUIREMENT_TYPES,
+  UNCERTAINTY_BASES,
+  buildAnalysisId,
+  buildEvidenceSnapshot,
+  buildEvidenceSnapshotId,
+  buildGapId,
+  buildInputBundle,
+  buildMatchId,
+  buildPositioningClaimId,
+  buildPositioningVersionId,
+  buildRequirementId,
+  canonicalSerialize,
+  classifyMatch,
+  digestCanonical,
+  normalizeSourceRef,
+  validateMatchRecord,
+  validatePositioningClaimEdges,
+  validatePositioningVersion,
+  validateRequirement,
+  validateSnapshot,
+  validateTraceability,
+};

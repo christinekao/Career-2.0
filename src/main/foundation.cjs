@@ -41,6 +41,11 @@ const PUBLIC_ERROR_MESSAGES = Object.freeze({
   OPPORTUNITY_EVIDENCE_VERSION_UNSUPPORTED: 'The Opportunity/Evidence schema version is unsupported.',
   OPPORTUNITY_EVIDENCE_NOT_READY: 'The Opportunity/Evidence substrate is unavailable.',
   OPPORTUNITY_EVIDENCE_INVALID: 'The Opportunity/Evidence input is invalid.',
+  INTELLIGENCE_MIGRATION_FAILED: 'Intelligence persistence migration failed.',
+  INTELLIGENCE_SCHEMA_INVALID: 'The intelligence schema is invalid.',
+  INTELLIGENCE_VERSION_UNSUPPORTED: 'The intelligence schema version is unsupported.',
+  INTELLIGENCE_NOT_READY: 'Intelligence persistence is unavailable.',
+  INTELLIGENCE_UNAVAILABLE: 'Intelligence is unavailable for the selected input.',
   OPPORTUNITY_NOT_FOUND: 'The Opportunity was not found.',
   OPPORTUNITY_INVALID: 'The Opportunity input is invalid.',
   JD_REVISION_INVALID: 'The JD revision input is invalid.',
@@ -74,6 +79,8 @@ function toPublicFoundationStatus(status) {
     'storeIdentity',
     'storeVersion',
     'opportunityEvidenceSchemaVersion',
+    'intelligencePhase',
+    'intelligenceSchemaVersion',
   ]) {
     if (status[field] !== undefined) publicStatus[field] = status[field];
   }
@@ -87,6 +94,14 @@ function toPublicFoundationStatus(status) {
     publicStatus.opportunityEvidenceStatus = {
       phase: substrateStatus.phase || 'unavailable',
       ...toPublicError(substrateStatus, 'OPPORTUNITY_EVIDENCE_NOT_READY'),
+    };
+  }
+
+  if (status.intelligenceStatus && typeof status.intelligenceStatus === 'object') {
+    const intelligenceStatus = status.intelligenceStatus;
+    publicStatus.intelligenceStatus = {
+      phase: intelligenceStatus.phase || 'unavailable',
+      ...toPublicError(intelligenceStatus, 'INTELLIGENCE_NOT_READY'),
     };
   }
 
@@ -121,16 +136,20 @@ function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_R
       allowDegradedOnMigrationFailure: true,
     });
     const substrateAvailable = Boolean(store.opportunity && store.evidence);
+    const intelligenceAvailable = Boolean(store.intelligence);
 
     return {
       status: toPublicFoundationStatus({
         phase: 'ready',
         foundationPhase: 'ready',
         opportunityEvidencePhase: substrateAvailable ? 'ready' : 'unavailable',
+        intelligencePhase: intelligenceAvailable ? 'ready' : 'unavailable',
         storeIdentity: store.metadata.storeIdentity,
         storeVersion: store.metadata.storeVersion,
         opportunityEvidenceSchemaVersion: substrateAvailable ? store.metadata.opportunityEvidenceSchemaVersion : null,
+        intelligenceSchemaVersion: intelligenceAvailable ? store.metadata.intelligenceSchemaVersion : null,
         ...(store.substrateStatus ? { opportunityEvidenceStatus: store.substrateStatus } : {}),
+        ...(store.intelligenceStatus ? { intelligenceStatus: store.intelligenceStatus } : {}),
       }),
       ...(substrateAvailable ? { opportunity: store.opportunity, evidence: store.evidence } : {}),
       close() {

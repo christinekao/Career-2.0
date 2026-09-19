@@ -151,7 +151,7 @@ app.on('browser-window-created', (_event, window) => {
         };
       })()`);
 
-      assert.deepEqual(result.capabilityKeys, ['evidence', 'getStatus', 'opportunity']);
+      assert.deepEqual(result.capabilityKeys, ['evidence', 'getStatus', 'intelligence', 'opportunity']);
       assert.equal(result.privatePath.kind, 'error');
       assertSafePublicError(
         result.privatePath,

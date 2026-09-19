@@ -1,10 +1,12 @@
 const assert = require('node:assert/strict');
 const crypto = require('node:crypto');
 const fs = require('node:fs');
+const Module = require('node:module');
 const os = require('node:os');
 const path = require('node:path');
 const electron = require('electron');
 const { app } = electron;
+const intelligence = require('../src/main/intelligence.cjs');
 
 const {
   foundationDatabasePath,
@@ -18,6 +20,8 @@ const expectedPreloadPath = path.join(repositoryRoot, 'src', 'preload', 'index.c
 const mainSource = fs.readFileSync(path.join(repositoryRoot, 'src', 'main', 'index.cjs'), 'utf8');
 const preloadSource = fs.readFileSync(expectedPreloadPath, 'utf8');
 const expectedPreloadSourceHash = crypto.createHash('sha256').update(preloadSource, 'utf8').digest('hex');
+const mainPath = path.join(repositoryRoot, 'src', 'main', 'index.cjs');
+const foundationPath = path.join(repositoryRoot, 'src', 'main', 'foundation.cjs');
 const visibleObservationWindowMs = 8000;
 const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'career-2-electron-startup-'));
 const privateRootPath = path.join(temporaryRoot, 'private-root');
@@ -34,6 +38,98 @@ const repositoryStateExisted = fs.existsSync(repositoryStatePath);
 const remoteRequests = [];
 let failed = false;
 let cleaned = false;
+
+function syntheticResponse(request) {
+  const evidence = request.payload.evidence.map((item) => ({
+    evidence_revision_id: item.evidence_revision_id,
+    evidence_id: item.evidence_id,
+    factual_content: item.factual_content,
+    responsibility_boundary: item.responsibility_boundary,
+    outcome: item.outcome,
+    confirmation_state: 'CONFIRMED',
+    provenance: item.provenance,
+  }));
+  const snapshot = intelligence.buildEvidenceSnapshot({
+    evidenceRevisionIds: evidence.map((item) => item.evidence_revision_id),
+    evidenceRevisions: evidence,
+    expectedEvidenceId: evidence[0].evidence_id,
+    inputGeneration: request.input_generation,
+  });
+  const requirement = intelligence.validateRequirement({
+    jdRevisionId: request.jd_revision_id,
+    sourceRef: 'jd:line:1',
+    normalizedContent: 'Build reliable local systems.',
+    requirementType: 'RESPONSIBILITY',
+    priority: 'HIGH',
+    explicitness: 'EXPLICIT',
+    extractionStatus: 'EXTRACTED',
+    uncertainty: { signal_type: 'EXTRACTION_UNCERTAINTY', value: 0, basis: 'RULE' },
+  });
+  const match = intelligence.classifyMatch({
+    requirement,
+    evidenceSnapshot: snapshot,
+    evaluation: {
+      completeSupport: true,
+      evidenceComplete: true,
+      supportedEvidenceRevisionIds: [evidence[0].evidence_revision_id],
+      missingDimensions: [],
+      explanation: 'Synthetic Evidence covers the requested work. Scope: The evaluated material dimensions are covered.',
+      explanation_details: {
+        support_summary: 'Synthetic Evidence covers the requested work.',
+        scope_summary: 'The evaluated material dimensions are covered.',
+      },
+    },
+  });
+  const positioning = intelligence.validatePositioningVersion({
+    positioningVersionId: intelligence.buildPositioningVersionId({ opportunityId: request.opportunity_id, versionNumber: 1 }),
+    opportunityId: request.opportunity_id,
+    jdRevisionId: request.jd_revision_id,
+    analysisId: `analysis:${request.opportunity_id}:${request.jd_revision_id}:${request.input_generation}`,
+    evidenceSnapshotId: request.evidence_snapshot_id,
+    inputGeneration: request.input_generation,
+    evidenceSnapshot: snapshot,
+    versionNumber: 1,
+    state: 'CANDIDATE',
+    requirements: [requirement],
+    matches: [match],
+    claims: [{
+      requirementId: requirement.requirement_id,
+      matchId: match.match_id,
+      evidenceRevisionIds: match.evidence_revision_ids,
+      claimKind: 'SUPPORTED',
+      claimText: 'Show reliable local system ownership.',
+    }],
+  });
+  return {
+    execution_id: request.execution_id,
+    idempotency_key: request.idempotency_key,
+    operation_type: request.operation_type,
+    schema_version: request.schema_version,
+    opportunity_id: request.opportunity_id,
+    jd_revision_id: request.jd_revision_id,
+    evidence_snapshot_id: request.evidence_snapshot_id,
+    input_generation: request.input_generation,
+    result_status: 'SUCCEEDED',
+    validation_status: 'VALID',
+    payload: { requirements: [requirement], matches: [match], positioning },
+  };
+}
+
+const originalFoundation = require(foundationPath);
+const injectedFoundation = {
+  ...originalFoundation,
+  bootstrapFoundation(args) {
+    return originalFoundation.bootstrapFoundation({
+      ...args,
+      persistenceOptions: { executor: { execute: async (request) => syntheticResponse(request) } },
+    });
+  },
+};
+const originalLoad = Module._load;
+Module._load = function load(request, parent, isMain) {
+  if (parent?.filename === mainPath && request === './foundation.cjs') return injectedFoundation;
+  return originalLoad.call(this, request, parent, isMain);
+};
 
 function cleanup() {
   if (cleaned) return;
@@ -131,6 +227,35 @@ app.on('browser-window-created', (_event, window) => {
             evidence: await capability.evidence.get(evidence.evidenceId),
           }
           : null;
+        const intelligenceContext = confirmedEvidence
+          ? await capability.intelligence.loadContext({
+            opportunityId: opportunity.opportunityId,
+            jdRevisionId: jdRevision.jdRevisionId,
+            evidenceRevisionIds: [confirmedEvidence.currentRevisionId],
+            inputGeneration: 'electron-context-generation',
+          })
+          : null;
+        const execution = confirmedEvidence
+          ? await capability.intelligence.startExecution({
+            opportunityId: opportunity.opportunityId,
+            jdRevisionId: jdRevision.jdRevisionId,
+            evidenceRevisionIds: [confirmedEvidence.currentRevisionId],
+            inputGeneration: 'electron-execution-generation',
+            operationType: 'ANALYZE_REQUIREMENTS',
+            executionId: 'electron-execution',
+            idempotencyKey: 'electron-idempotency',
+            disclosureClassification: 'LOCAL_SYNTHETIC',
+          })
+          : null;
+        const candidate = execution?.result_payload?.positioning
+          ? await capability.intelligence.getPositioning(execution.result_payload.positioning.positioning_version_id)
+          : null;
+        const confirmedPositioning = candidate
+          ? await capability.intelligence.confirmPositioning(candidate.positioning_version_id, '2026-09-17T03:04:00.000Z')
+          : null;
+        const currentPositioning = confirmedPositioning
+          ? await capability.intelligence.getCurrentPositioning(opportunity.opportunityId)
+          : null;
         return {
           url: location.href,
           status: capability ? await capability.getStatus() : null,
@@ -144,6 +269,11 @@ app.on('browser-window-created', (_event, window) => {
           evidence,
           confirmedEvidence,
           readBack,
+          intelligenceContext,
+          execution,
+          candidate,
+          confirmedPositioning,
+          currentPositioning,
           rootText: document.querySelector('#root')?.textContent || '',
           assetUrls: Array.from(document.querySelectorAll('script[src],link[href]'))
             .map((element) => element.src || element.href),
@@ -154,7 +284,7 @@ app.on('browser-window-created', (_event, window) => {
       assert.equal(renderer.status?.phase, 'ready');
       assert.equal(renderer.status?.storeVersion, 1);
       assert.equal(renderer.status?.opportunityEvidenceSchemaVersion, 1);
-      assert.deepEqual(renderer.capabilityKeys, ['evidence', 'getStatus', 'opportunity']);
+      assert.deepEqual(renderer.capabilityKeys, ['evidence', 'getStatus', 'intelligence', 'opportunity']);
       assert.equal(renderer.requireType, 'undefined');
       assert.equal(renderer.processType, 'undefined');
       assert.equal(renderer.fsType, 'undefined');
@@ -173,7 +303,14 @@ app.on('browser-window-created', (_event, window) => {
         kind: 'user_note',
         reference: 'synthetic-evidence',
       });
-      assert.match(renderer.rootText, /Local foundation/);
+      assert.equal(renderer.intelligenceContext.opportunity.opportunityId, renderer.opportunity.opportunityId);
+      assert.equal(renderer.intelligenceContext.jdRevision.jdRevisionId, renderer.jdRevision.jdRevisionId);
+      assert.deepEqual(renderer.intelligenceContext.evidenceSnapshot.evidence_revision_ids, [renderer.confirmedEvidence.currentRevisionId]);
+      assert.equal(renderer.execution.execution_state, 'COMPLETED');
+      assert.equal(renderer.candidate.state, 'CANDIDATE');
+      assert.equal(renderer.confirmedPositioning.state, 'CONFIRMED');
+      assert.equal(renderer.currentPositioning.positioning_version_id, renderer.confirmedPositioning.positioning_version_id);
+      assert.match(renderer.rootText, /Opportunity intelligence/);
       assert.ok(renderer.assetUrls.length > 0);
       assert.ok(renderer.assetUrls.every((assetUrl) => new URL(assetUrl).protocol === 'file:'));
       assert.deepEqual(remoteRequests, []);
@@ -201,7 +338,13 @@ app.on('browser-window-created', (_event, window) => {
       assert.equal(metadata.get('opportunity_evidence_schema_version'), '1');
       assert.deepEqual(
         database.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name").pluck().all(),
-        ['evidence_records', 'evidence_revisions', 'foundation_metadata', 'jd_revisions', 'opportunities'],
+        [
+          'evidence_records', 'evidence_revisions', 'foundation_metadata',
+          'intelligence_evidence_snapshots', 'intelligence_executions', 'intelligence_input_generations',
+          'intelligence_matches', 'intelligence_positioning_claims', 'intelligence_positioning_current',
+          'intelligence_positioning_versions', 'intelligence_provenance_edges', 'intelligence_requirements',
+          'jd_revisions', 'opportunities',
+        ],
       );
       database.close();
       assert.equal(fs.existsSync(repositoryStatePath), repositoryStateExisted);

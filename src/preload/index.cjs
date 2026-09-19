@@ -29,19 +29,33 @@ async function invokeDomain(channel, ...args) {
 }
 
 contextBridge.exposeInMainWorld('careerFoundation', {
-  getStatus: () => ipcRenderer.invoke('foundation:get-status'),
+  getStatus: () => invokeDomain('foundation:get-status'),
   opportunity: {
     create: (input) => invokeDomain('opportunity:create', input),
     get: (opportunityId) => invokeDomain('opportunity:get', opportunityId),
+    list: () => invokeDomain('opportunity:list'),
     addJdRevision: (opportunityId, input) => invokeDomain('opportunity:add-jd-revision', opportunityId, input),
     getJdRevision: (opportunityId, jdRevisionId) => invokeDomain('opportunity:get-jd-revision', opportunityId, jdRevisionId),
   },
   evidence: {
     create: (input) => invokeDomain('evidence:create', input),
     get: (evidenceId) => invokeDomain('evidence:get', evidenceId),
+    list: () => invokeDomain('evidence:list'),
     createRevision: (evidenceId, input) => invokeDomain('evidence:create-revision', evidenceId, input),
     confirmRevision: (evidenceId, evidenceRevisionId, confirmedAt) => (
       invokeDomain('evidence:confirm-revision', evidenceId, evidenceRevisionId, confirmedAt)
+    ),
+  },
+  intelligence: {
+    loadContext: (input) => invokeDomain('intelligence:load-context', input),
+    startExecution: (input) => invokeDomain('intelligence:start-execution', input),
+    cancelExecution: (executionId) => invokeDomain('intelligence:cancel-execution', executionId),
+    getExecution: (executionId) => invokeDomain('intelligence:get-execution', executionId),
+    getPositioning: (positioningVersionId) => invokeDomain('intelligence:get-positioning', positioningVersionId),
+    getCurrentPositioning: (opportunityId) => invokeDomain('intelligence:get-current-positioning', opportunityId),
+    listPositioning: (opportunityId) => invokeDomain('intelligence:list-positioning', opportunityId),
+    confirmPositioning: (positioningVersionId, confirmedAt) => (
+      invokeDomain('intelligence:confirm-positioning', positioningVersionId, confirmedAt)
     ),
   },
 });

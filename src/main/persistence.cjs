@@ -43,6 +43,7 @@ const {
   foundationDatabasePath,
   ensureFoundationStateDirectory,
 } = require('./private-root.cjs');
+const { createBackupOperations } = require('./backup.cjs');
 
 const FOUNDATION_STORE_VERSION = 1;
 const OPPORTUNITY_EVIDENCE_SCHEMA_VERSION = 1;
@@ -714,6 +715,22 @@ const INTELLIGENCE_SCHEMA_CONTRACT = {
         'version_number >= 1',
       ],
     },
+    intelligence_positioning_current: {
+      columns: [
+        { name: 'opportunity_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'positioning_version_id', type: 'TEXT', notNull: true },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+        { name: 'updated_at', type: 'TEXT', notNull: true },
+      ],
+      uniqueConstraints: [['positioning_version_id']],
+      foreignKeys: [{
+        columns: ['positioning_version_id'],
+        referencedTable: 'intelligence_positioning_versions',
+        referencedColumns: ['positioning_version_id'],
+        onDelete: 'RESTRICT',
+      }],
+      checks: [],
+    },
     intelligence_positioning_claims: {
       columns: [
         { name: 'positioning_claim_id', type: 'TEXT', notNull: true, primaryKey: true },
@@ -790,6 +807,7 @@ const INTELLIGENCE_SCHEMA_CONTRACT = {
     { name: 'intelligence_matches_requirement_idx', table: 'intelligence_matches', unique: false, columns: ['requirement_id', 'evidence_snapshot_id'] },
     { name: 'intelligence_positioning_opportunity_idx', table: 'intelligence_positioning_versions', unique: false, columns: ['opportunity_id', 'version_number'] },
     { name: 'intelligence_claim_version_idx', table: 'intelligence_positioning_claims', unique: false, columns: ['positioning_version_id', 'ordinal'] },
+    { name: 'intelligence_positioning_current_generation_idx', table: 'intelligence_positioning_current', unique: false, columns: ['opportunity_id', 'input_generation'] },
     { name: 'intelligence_edges_requirement_idx', table: 'intelligence_provenance_edges', unique: false, columns: ['requirement_id'] },
   ],
 };
@@ -845,6 +863,30 @@ function renderIntelligenceExecutionSchemaSql() {
       + `ON ${sqlIdentifier(index.table)} (${index.columns.map(sqlIdentifier).join(', ')});`
     ));
   return [tableStatement, ...indexStatements].join('\n');
+}
+
+function renderIntelligencePositioningCurrentSchemaSql() {
+  const tableName = 'intelligence_positioning_current';
+  const contract = INTELLIGENCE_SCHEMA_CONTRACT.tables[tableName];
+  const definitions = contract.columns.map((column) => {
+    const parts = [sqlIdentifier(column.name), column.type];
+    if (column.primaryKey) parts.push('PRIMARY KEY');
+    if (column.notNull) parts.push('NOT NULL');
+    return parts.join(' ');
+  });
+  for (const columns of contract.uniqueConstraints) definitions.push(`UNIQUE (${columns.map(sqlIdentifier).join(', ')})`);
+  for (const foreignKey of contract.foreignKeys) {
+    definitions.push(
+      `FOREIGN KEY (${foreignKey.columns.map(sqlIdentifier).join(', ')}) REFERENCES `
+      + `${sqlIdentifier(foreignKey.referencedTable)} (${foreignKey.referencedColumns.map(sqlIdentifier).join(', ')}) `
+      + `ON DELETE ${foreignKey.onDelete}`,
+    );
+  }
+  const tableStatement = `CREATE TABLE IF NOT EXISTS ${sqlIdentifier(tableName)} (\n  ${definitions.join(',\n  ')}\n);`;
+  const index = INTELLIGENCE_SCHEMA_CONTRACT.indexes.find((candidate) => candidate.name === 'intelligence_positioning_current_generation_idx');
+  const indexStatement = `CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${sqlIdentifier(index.name)} `
+    + `ON ${sqlIdentifier(index.table)} (${index.columns.map(sqlIdentifier).join(', ')});`;
+  return `${tableStatement}\n${indexStatement}`;
 }
 
 function readIntelligenceSchemaVersion(database) {
@@ -1354,6 +1396,29 @@ function assertIntelligenceDataIntegrity(database) {
       }
     }
   }
+
+  for (const current of database.prepare('SELECT * FROM intelligence_positioning_current').all()) {
+    const version = database.prepare('SELECT * FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(current.positioning_version_id);
+    if (!version
+      || version.opportunity_id !== current.opportunity_id
+      || version.input_generation !== current.input_generation
+      || version.state !== 'CONFIRMED') {
+      invalidData('Intelligence current positioning pointer is invalid.');
+    }
+    const analysis = database.prepare('SELECT input_generation FROM intelligence_input_generations WHERE analysis_id = ?').get(version.analysis_id);
+    if (!analysis || analysis.input_generation !== current.input_generation) {
+      invalidData('Intelligence current positioning pointer generation is invalid.');
+    }
+    const opportunity = database.prepare('SELECT current_jd_revision_id FROM opportunities WHERE opportunity_id = ?').get(current.opportunity_id);
+    if (!opportunity || opportunity.current_jd_revision_id !== version.jd_revision_id) {
+      invalidData('Intelligence current positioning pointer is stale.');
+    }
+    const snapshot = loadSnapshot(database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(version.evidence_snapshot_id));
+    const evidence = database.prepare('SELECT current_revision_id FROM evidence_records WHERE evidence_id = ?').get(snapshot.evidence_id);
+    if (evidence?.current_revision_id && !snapshot.evidence_revision_ids.includes(evidence.current_revision_id)) {
+      invalidData('Intelligence current positioning pointer Evidence generation is stale.');
+    }
+  }
 }
 
 function assertIntelligenceSchema(database) {
@@ -1362,6 +1427,46 @@ function assertIntelligenceSchema(database) {
   assertIntelligenceForeignKeys(database);
   assertIntelligenceChecks(database);
   assertIntelligenceDataIntegrity(database);
+}
+
+function markPositioningStaleForContext(database, { opportunityId, evidenceId } = {}) {
+  const table = database.prepare(
+    "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'intelligence_positioning_versions'",
+  ).get();
+  if (!table) return;
+  database.transaction(() => {
+    if (opportunityId) {
+      database.prepare(`
+        UPDATE intelligence_positioning_versions
+           SET state = 'STALE'
+         WHERE opportunity_id = ? AND state IN ('DRAFT', 'CANDIDATE', 'CONFIRMED')
+           AND jd_revision_id <> COALESCE((SELECT current_jd_revision_id FROM opportunities WHERE opportunity_id = ?), '')
+      `).run(opportunityId, opportunityId);
+      database.prepare(`
+        DELETE FROM intelligence_positioning_current
+         WHERE opportunity_id = ?
+           AND positioning_version_id IN (
+             SELECT positioning_version_id FROM intelligence_positioning_versions WHERE state <> 'CONFIRMED'
+           )
+      `).run(opportunityId);
+    }
+    if (evidenceId) {
+      database.prepare(`
+        UPDATE intelligence_positioning_versions
+           SET state = 'STALE'
+         WHERE state IN ('DRAFT', 'CANDIDATE', 'CONFIRMED')
+           AND evidence_snapshot_id IN (
+             SELECT evidence_snapshot_id FROM intelligence_evidence_snapshots WHERE evidence_id = ?
+           )
+      `).run(evidenceId);
+      database.prepare(`
+        DELETE FROM intelligence_positioning_current
+         WHERE positioning_version_id IN (
+           SELECT positioning_version_id FROM intelligence_positioning_versions WHERE state <> 'CONFIRMED'
+        )
+      `).run();
+    }
+  })();
 }
 
 function migrateIntelligenceSchema(database, options = {}) {
@@ -1376,7 +1481,14 @@ function migrateIntelligenceSchema(database, options = {}) {
   if (currentVersion === INTELLIGENCE_SCHEMA_VERSION) {
     const upgradeExisting = database.transaction(() => {
       assertMigrationOwnership(options.privateRoot, options.ownership, options);
+      // Keep the monotonic schema marker at v1. Existing v1 stores may predate
+      // the current-positioning pointer, so add only that new table/index;
+      // older structures remain subject to the normal fail-closed checks.
       database.exec(renderIntelligenceExecutionSchemaSql());
+      const currentTable = database.prepare(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'intelligence_positioning_current'",
+      ).get();
+      if (!currentTable) database.exec(renderIntelligencePositioningCurrentSchemaSql());
       runMigrationCheckpoint(options, 'intelligence-after-execution-schema');
       assertMigrationOwnership(options.privateRoot, options.ownership, options);
       assertIntelligenceSchema(database);
@@ -1578,6 +1690,12 @@ function createDomainOperations(database, privateRoot, ownership, options, isClo
     return readOpportunity(normalizeId(value, 'opportunityId'));
   }
 
+  function listOpportunities() {
+    assertDomainReady();
+    return database.prepare('SELECT opportunity_id FROM opportunities ORDER BY created_at ASC, opportunity_id ASC')
+      .all().map((row) => readOpportunity(row.opportunity_id));
+  }
+
   function addJdRevision(opportunityValue, input = {}) {
     assertDomainReady();
     const opportunityId = normalizeId(opportunityValue, 'opportunityId');
@@ -1622,6 +1740,7 @@ function createDomainOperations(database, privateRoot, ownership, options, isClo
       ).run(jdRevisionId, capturedAt, opportunityId);
     });
     insert();
+    markPositioningStaleForContext(database, { opportunityId });
     return readOpportunity(opportunityId).jdRevisions.at(-1);
   }
 
@@ -1701,12 +1820,19 @@ function createDomainOperations(database, privateRoot, ownership, options, isClo
       );
     });
     insert();
+    markPositioningStaleForContext(database, { evidenceId });
     return readEvidence(evidenceId);
   }
 
   function getEvidence(value) {
     assertDomainReady();
     return readEvidence(normalizeId(value, 'evidenceId'));
+  }
+
+  function listEvidence() {
+    assertDomainReady();
+    return database.prepare('SELECT evidence_id FROM evidence_records ORDER BY created_at ASC, evidence_id ASC')
+      .all().map((row) => readEvidence(row.evidence_id));
   }
 
   function createEvidenceRevision(evidenceValue, input = {}) {
@@ -1784,6 +1910,7 @@ function createDomainOperations(database, privateRoot, ownership, options, isClo
       ).run(currentRevisionId, timestamp, evidenceId);
     });
     confirm();
+    markPositioningStaleForContext(database, { evidenceId });
     return readEvidence(evidenceId);
   }
 
@@ -1791,12 +1918,14 @@ function createDomainOperations(database, privateRoot, ownership, options, isClo
     opportunity: Object.freeze({
       create: createOpportunity,
       get: getOpportunity,
+      list: listOpportunities,
       addJdRevision,
       getJdRevision,
     }),
     evidence: Object.freeze({
       create: createEvidence,
       get: getEvidence,
+      list: listEvidence,
       createRevision: createEvidenceRevision,
       confirmRevision: confirmEvidenceRevision,
     }),
@@ -2031,30 +2160,43 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
           ) {
             throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Analysis identity is already bound to different immutable inputs.');
           }
-          return;
+        } else {
+          database.prepare(`
+            INSERT INTO intelligence_input_generations (
+              analysis_id, opportunity_id, jd_revision_id, evidence_snapshot_id,
+              evidence_revision_ids_json, operation_type, schema_version,
+              execution_id, idempotency_key, input_generation, requested_at,
+              disclosure_classification, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            bundle.analysis_id,
+            bundle.opportunity_id,
+            bundle.jd_revision_id,
+            bundle.evidence_snapshot_id,
+            canonicalSerialize(bundle.evidence_revision_ids),
+            bundle.operation_type,
+            bundle.schema_version,
+            bundle.execution_id,
+            bundle.idempotency_key,
+            bundle.input_generation,
+            bundle.requested_at,
+            bundle.disclosure_classification,
+            bundle.requested_at,
+          );
         }
         database.prepare(`
-          INSERT INTO intelligence_input_generations (
-            analysis_id, opportunity_id, jd_revision_id, evidence_snapshot_id,
-            evidence_revision_ids_json, operation_type, schema_version,
-            execution_id, idempotency_key, input_generation, requested_at,
-            disclosure_classification, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-          bundle.analysis_id,
-          bundle.opportunity_id,
-          bundle.jd_revision_id,
-          bundle.evidence_snapshot_id,
-          canonicalSerialize(bundle.evidence_revision_ids),
-          bundle.operation_type,
-          bundle.schema_version,
-          bundle.execution_id,
-          bundle.idempotency_key,
-          bundle.input_generation,
-          bundle.requested_at,
-          bundle.disclosure_classification,
-          bundle.requested_at,
-        );
+          UPDATE intelligence_positioning_versions
+             SET state = 'STALE'
+           WHERE opportunity_id = ? AND input_generation <> ?
+             AND state IN ('DRAFT', 'CANDIDATE', 'CONFIRMED')
+        `).run(bundle.opportunity_id, bundle.input_generation);
+        database.prepare(`
+          DELETE FROM intelligence_positioning_current
+           WHERE opportunity_id = ?
+             AND positioning_version_id IN (
+               SELECT positioning_version_id FROM intelligence_positioning_versions WHERE state <> 'CONFIRMED'
+             )
+        `).run(bundle.opportunity_id);
       });
       persisted();
       return Object.freeze({ ...bundle, evidence_snapshot: snapshot });
@@ -2229,10 +2371,19 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     const snapshot = readSnapshot(request.evidence_snapshot_id);
     const jd = database.prepare('SELECT content, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(request.jd_revision_id);
     if (!jd || jd.availability_status !== 'AVAILABLE') throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Execution candidate JD is unavailable.');
+    const analysisId = database.prepare('SELECT analysis_id FROM intelligence_input_generations WHERE execution_id = ?').get(request.execution_id)?.analysis_id;
+    if (!analysisId) throw new FoundationPersistenceError('INTELLIGENCE_INPUT_NOT_FOUND', 'Execution input generation does not exist.');
     const requirements = Array.isArray(payload.requirements) ? payload.requirements.map((item) => {
       const requirement = validateRequirement(item);
       if (!requirement.ready || requirement.jd_revision_id !== request.jd_revision_id || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content, request.jd_revision_id)) {
         throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution requirement is not resolvable to the selected JD revision.');
+      }
+      const existing = database.prepare('SELECT analysis_id FROM intelligence_requirements WHERE requirement_id = ?').get(requirement.requirement_id);
+      if (existing) {
+        const persisted = readRequirement(requirement.requirement_id);
+        if (existing.analysis_id !== analysisId || canonicalSerialize(persisted) !== canonicalSerialize(requirement)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution requirement identity is already bound to different immutable inputs.');
+        }
       }
       return requirement;
     }) : [];
@@ -2248,6 +2399,12 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
         match,
         snapshot,
       });
+      const existing = database.prepare('SELECT match_id, input_generation FROM intelligence_matches WHERE match_id = ?').get(match.match_id);
+      if (existing) {
+        if (existing.input_generation !== request.input_generation || canonicalSerialize(readMatch(match.match_id)) !== canonicalSerialize(match)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution match identity is already bound to different immutable inputs.');
+        }
+      }
       return { ...match, provenance_edges: trace.provenance_edges };
     }) : [];
     if (request.operation_type === 'ANALYZE_REQUIREMENTS' && !Array.isArray(payload.requirements)) {
@@ -2260,18 +2417,21 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     if (payload.positioning !== undefined) {
       if (!payload.positioning || typeof payload.positioning !== 'object' || Array.isArray(payload.positioning)) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Positioning candidate must be structured.');
       if (!Array.isArray(payload.positioning.claims)) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Positioning candidate claims must be an array.');
-      const analysis = database.prepare('SELECT analysis_id FROM intelligence_input_generations WHERE execution_id = ?').get(request.execution_id);
       positioning = validatePositioningVersion({
         ...payload.positioning,
         opportunity_id: request.opportunity_id,
         jd_revision_id: request.jd_revision_id,
-        analysis_id: analysis?.analysis_id,
+        analysis_id: analysisId,
         evidence_snapshot_id: request.evidence_snapshot_id,
         input_generation: request.input_generation,
         evidence_snapshot: snapshot,
         requirements,
         matches,
       });
+      const existing = database.prepare('SELECT * FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(positioning.positioning_version_id);
+      if (existing && canonicalSerialize(readPositioningVersion(positioning.positioning_version_id)) !== canonicalSerialize(positioning)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution positioning identity is already bound to different immutable inputs.');
+      }
     }
     if (request.operation_type === 'DRAFT_POSITIONING' && !positioning) {
       throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Positioning output must contain a positioning candidate.');
@@ -2472,6 +2632,9 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
         ? (optionsInput.cancellationAcknowledged === undefined ? null : (optionsInput.cancellationAcknowledged ? 1 : 0))
         : null;
       database.transaction(() => {
+        if (isCurrent && resultPayload !== null) {
+          persistValidatedCandidatePayload(record.request, resultPayload);
+        }
         if (isCurrent) {
           database.prepare(`
             UPDATE intelligence_executions
@@ -2528,6 +2691,158 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       );
       return readExecutionRow(executionId);
     });
+  }
+
+  function persistValidatedCandidatePayload(request, payload) {
+    const analysisId = database.prepare(
+      'SELECT analysis_id FROM intelligence_input_generations WHERE execution_id = ?',
+    ).get(request.execution_id)?.analysis_id;
+    if (!analysisId) throw new FoundationPersistenceError('INTELLIGENCE_INPUT_NOT_FOUND', 'Execution input generation does not exist.');
+    const createdAt = request.requested_at;
+    const requirements = Array.isArray(payload.requirements) ? payload.requirements : [];
+    for (const requirement of requirements) {
+      const existing = database.prepare('SELECT * FROM intelligence_requirements WHERE requirement_id = ?').get(requirement.requirement_id);
+      if (existing) {
+        const current = readRequirement(requirement.requirement_id);
+        if (existing.analysis_id !== analysisId || canonicalSerialize(current) !== canonicalSerialize(requirement)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution requirement identity is already bound to different immutable inputs.');
+        }
+        continue;
+      }
+      database.prepare(`
+        INSERT INTO intelligence_requirements (
+          requirement_id, analysis_id, jd_revision_id, source_ref_json,
+          normalized_content, requirement_type, priority, explicitness,
+          uncertainty_json, extraction_status, contract_version, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        requirement.requirement_id,
+        analysisId,
+        requirement.jd_revision_id,
+        canonicalSerialize(requirement.source_ref),
+        requirement.normalized_content,
+        requirement.requirement_type,
+        requirement.priority,
+        requirement.explicitness,
+        canonicalSerialize(requirement.uncertainty),
+        requirement.extraction_status,
+        requirement.contract_version,
+        createdAt,
+      );
+    }
+    const snapshot = readSnapshot(request.evidence_snapshot_id);
+    const persistedRequirements = new Map(requirements.map((item) => [item.requirement_id, item]));
+    const matches = Array.isArray(payload.matches) ? payload.matches : [];
+    for (const match of matches) {
+      const existing = database.prepare('SELECT * FROM intelligence_matches WHERE match_id = ?').get(match.match_id);
+      if (existing) {
+        if (canonicalSerialize(readMatch(match.match_id)) !== canonicalSerialize(match)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution match identity is already bound to different immutable inputs.');
+        }
+        continue;
+      }
+      const requirement = persistedRequirements.get(match.requirement_id) || readRequirement(match.requirement_id);
+      if (!requirement) throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution match requirement is not persisted.');
+      const provenance = validateTraceability({
+        jdSourceRef: requirement.source_ref,
+        jdRevisionId: requirement.jd_revision_id,
+        requirement,
+        match,
+        snapshot,
+      });
+      database.prepare(`
+        INSERT INTO intelligence_matches (
+          match_id, gap_id, jd_revision_id, requirement_id, evidence_snapshot_id,
+          input_generation, classification, decision_facts_json,
+          evidence_revision_ids_json, missing_dimensions_json, explanation, boundary, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        match.match_id,
+        match.gap_id,
+        match.jd_revision_id,
+        match.requirement_id,
+        match.evidence_snapshot_id,
+        match.input_generation,
+        match.classification,
+        canonicalSerialize(match.decision_facts),
+        canonicalSerialize(match.evidence_revision_ids),
+        canonicalSerialize(match.missing_dimensions),
+        serializeMatchExplanation(match),
+        match.boundary ?? null,
+        createdAt,
+      );
+      persistProvenanceEdges(provenance.provenance_edges, match.input_generation);
+    }
+    if (payload.positioning !== undefined) {
+      const position = payload.positioning;
+      if (position.state === 'CONFIRMED') {
+        throw new FoundationPersistenceError('INTELLIGENCE_CONFIRMATION_REQUIRED', 'Execution output cannot confirm positioning implicitly.');
+      }
+      const existing = database.prepare('SELECT positioning_version_id FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(position.positioning_version_id);
+      if (existing) {
+        const existingVersion = readPositioningVersion(position.positioning_version_id);
+        if (canonicalSerialize(existingVersion) !== canonicalSerialize(position)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution positioning identity is already bound to different immutable inputs.');
+        }
+      } else {
+        const relationIds = [...new Set(position.claims.flatMap((claim) => [claim.match_id, claim.gap_id].filter(Boolean)))];
+        const relationRows = relationIds.map((id) => readMatchOrGap(id)).filter(Boolean);
+        const requirementRows = [...new Set(position.claims.map((claim) => claim.requirement_id))].map((id) => readRequirement(id)).filter(Boolean);
+        const version = validatePositioningVersion({
+          ...position,
+          opportunity_id: request.opportunity_id,
+          jd_revision_id: request.jd_revision_id,
+          analysis_id: analysisId,
+          evidence_snapshot: snapshot,
+          requirements: requirementRows,
+          matches: relationRows,
+        });
+        database.prepare(`
+          INSERT INTO intelligence_positioning_versions (
+            positioning_version_id, opportunity_id, jd_revision_id, analysis_id,
+            evidence_snapshot_id, input_generation, version_number, state,
+            claims_json, created_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          version.positioning_version_id,
+          version.opportunity_id,
+          version.jd_revision_id,
+          version.analysis_id,
+          version.evidence_snapshot_id,
+          version.input_generation,
+          version.version_number,
+          version.state,
+          canonicalSerialize(version.claims),
+          createdAt,
+        );
+        for (const claim of version.claims) {
+          database.prepare(`
+            INSERT INTO intelligence_positioning_claims (
+              positioning_claim_id, positioning_version_id, ordinal, requirement_id,
+              match_id, gap_id, evidence_revision_ids_json, claim_kind, claim_text, verified
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            claim.positioning_claim_id,
+            version.positioning_version_id,
+            claim.ordinal,
+            claim.requirement_id,
+            claim.match_id,
+            claim.gap_id,
+            canonicalSerialize(claim.evidence_revision_ids),
+            claim.claim_kind,
+            claim.claim_text,
+            claim.verified ? 1 : 0,
+          );
+          persistProvenanceEdges([
+            { edge_type: 'CLAIM_TO_REQUIREMENT', requirement_id: claim.requirement_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id },
+            ...(claim.match_id ? [{ edge_type: 'CLAIM_TO_MATCH', match_id: claim.match_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id }] : []),
+            ...(claim.gap_id ? [{ edge_type: 'CLAIM_TO_GAP', gap_id: claim.gap_id, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id }] : []),
+            ...claim.evidence_revision_ids.map((evidenceRevisionId) => ({ edge_type: 'CLAIM_TO_EVIDENCE', evidence_revision_id: evidenceRevisionId, positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id })),
+            { edge_type: 'CLAIM_TO_VERSION', positioning_claim_id: claim.positioning_claim_id, positioning_version_id: version.positioning_version_id },
+          ], version.input_generation);
+        }
+      }
+    }
   }
 
   const executionService = createExecutionService({
@@ -2771,6 +3086,15 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
         requirements,
         matches,
       });
+      if (version.state === 'CONFIRMED') {
+        throw new FoundationPersistenceError(
+          'INTELLIGENCE_CONFIRMATION_REQUIRED',
+          'Positioning versions cannot enter CONFIRMED through candidate persistence; confirmation is an explicit separate action.',
+        );
+      }
+      if (version.state === 'STALE') {
+        throw new FoundationPersistenceError('INTELLIGENCE_STALE_POSITIONING', 'Stale positioning is produced by input invalidation, not direct publication.');
+      }
       const existing = database.prepare('SELECT positioning_version_id FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(version.positioning_version_id);
       if (existing) {
         const existingVersion = readPositioningVersion(version.positioning_version_id);
@@ -2863,6 +3187,133 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     };
   }
 
+  function confirmPositioningVersion(positioningVersionId, confirmedAt) {
+    return run(() => {
+      const id = normalizeRequiredText(positioningVersionId, 'positioningVersionId', 'INTELLIGENCE_POSITIONING_NOT_FOUND');
+      const row = database.prepare('SELECT * FROM intelligence_positioning_versions WHERE positioning_version_id = ?').get(id);
+      if (!row) throw new FoundationPersistenceError('INTELLIGENCE_POSITIONING_NOT_FOUND', 'Positioning version does not exist.');
+      if (row.state !== 'CANDIDATE') {
+        throw new FoundationPersistenceError('INTELLIGENCE_CONFIRMATION_REQUIRED', 'Only a CANDIDATE positioning version can be explicitly confirmed.');
+      }
+      const opportunity = database.prepare('SELECT current_jd_revision_id FROM opportunities WHERE opportunity_id = ?').get(row.opportunity_id);
+      const snapshot = readSnapshot(row.evidence_snapshot_id);
+      const evidence = database.prepare('SELECT current_revision_id FROM evidence_records WHERE evidence_id = ?').get(snapshot.evidence_id);
+      if (!opportunity || opportunity.current_jd_revision_id !== row.jd_revision_id
+        || (evidence?.current_revision_id && !snapshot.evidence_revision_ids.includes(evidence.current_revision_id))) {
+        database.transaction(() => {
+          database.prepare("UPDATE intelligence_positioning_versions SET state = 'STALE' WHERE positioning_version_id = ? AND state = 'CANDIDATE'").run(id);
+          database.prepare('DELETE FROM intelligence_positioning_current WHERE positioning_version_id = ?').run(id);
+        })();
+        throw new FoundationPersistenceError('INTELLIGENCE_STALE_POSITIONING', 'Positioning candidate no longer matches the current input generation.');
+      }
+      const timestamp = normalizeTimestamp(confirmedAt, 'confirmedAt', 'INTELLIGENCE_POSITIONING_INVALID');
+      database.transaction(() => {
+        database.prepare(`
+          UPDATE intelligence_positioning_versions
+             SET state = 'STALE'
+           WHERE opportunity_id = ? AND state = 'CONFIRMED' AND positioning_version_id <> ?
+        `).run(row.opportunity_id, id);
+        database.prepare('DELETE FROM intelligence_positioning_current WHERE opportunity_id = ?').run(row.opportunity_id);
+        database.prepare("UPDATE intelligence_positioning_versions SET state = 'CONFIRMED' WHERE positioning_version_id = ? AND state = 'CANDIDATE'").run(id);
+        database.prepare(`
+          INSERT INTO intelligence_positioning_current (opportunity_id, positioning_version_id, input_generation, updated_at)
+          VALUES (?, ?, ?, ?)
+        `).run(row.opportunity_id, id, row.input_generation, timestamp);
+      })();
+      return readPositioningVersion(id);
+    });
+  }
+
+  function getCurrentPositioning(opportunityId) {
+    return run(() => {
+      const id = normalizeRequiredText(opportunityId, 'opportunityId', 'OPPORTUNITY_NOT_FOUND');
+      const pointer = database.prepare('SELECT positioning_version_id FROM intelligence_positioning_current WHERE opportunity_id = ?').get(id);
+      return pointer ? { ...readPositioningVersion(pointer.positioning_version_id), is_current: true } : null;
+    });
+  }
+
+  function listPositioningVersions(opportunityId) {
+    return run(() => {
+      const id = normalizeRequiredText(opportunityId, 'opportunityId', 'OPPORTUNITY_NOT_FOUND');
+      return database.prepare(
+        'SELECT positioning_version_id FROM intelligence_positioning_versions WHERE opportunity_id = ? ORDER BY version_number ASC',
+      ).all(id).map((row) => ({
+        ...readPositioningVersion(row.positioning_version_id),
+        is_current: Boolean(database.prepare(
+          'SELECT 1 FROM intelligence_positioning_current WHERE positioning_version_id = ?',
+        ).get(row.positioning_version_id)),
+      }));
+    });
+  }
+
+  function loadContext(input = {}) {
+    return run(() => {
+      const opportunityId = normalizeRequiredText(input.opportunityId ?? input.opportunity_id, 'opportunityId', 'OPPORTUNITY_NOT_FOUND');
+      const opportunityRow = database.prepare('SELECT * FROM opportunities WHERE opportunity_id = ?').get(opportunityId);
+      if (!opportunityRow) throw new FoundationPersistenceError('OPPORTUNITY_NOT_FOUND', 'Opportunity does not exist.');
+      const jdRevisionId = normalizeRequiredText(
+        input.jdRevisionId ?? input.jd_revision_id ?? opportunityRow.current_jd_revision_id,
+        'jdRevisionId',
+        'JD_REVISION_INVALID',
+      );
+      const jd = database.prepare('SELECT * FROM jd_revisions WHERE opportunity_id = ? AND jd_revision_id = ?').get(opportunityId, jdRevisionId);
+      if (!jd || jd.availability_status !== 'AVAILABLE') throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Selected JD revision is unavailable.');
+      const evidenceRevisionIds = input.evidenceRevisionIds ?? input.evidence_revision_ids;
+      const snapshot = evidenceRevisionIds === undefined
+        ? null
+        : resolveEvidenceSnapshot({
+          evidenceRevisionIds,
+          inputGeneration: input.inputGeneration ?? input.input_generation ?? `context:${jdRevisionId}`,
+          evidenceId: input.evidenceId ?? input.evidence_id,
+        });
+      const current = database.prepare(`
+        SELECT e.*
+          FROM intelligence_executions e
+         WHERE e.opportunity_id = ? AND e.jd_revision_id = ? AND e.is_current = 1
+         ORDER BY e.updated_at DESC LIMIT 1
+      `).get(opportunityId, jdRevisionId);
+      const currentPositioning = getCurrentPositioning(opportunityId);
+      return Object.freeze({
+        opportunity: {
+          opportunityId: opportunityRow.opportunity_id,
+          companyName: opportunityRow.company_name,
+          roleTitle: opportunityRow.role_title,
+          sourceRef: opportunityRow.source_ref,
+          currentJdRevisionId: opportunityRow.current_jd_revision_id,
+        },
+        jdRevision: {
+          jdRevisionId: jd.jd_revision_id,
+          opportunityId: jd.opportunity_id,
+          revisionNumber: jd.revision_number,
+          sourceRef: jd.source_ref,
+          availabilityStatus: jd.availability_status,
+        },
+        evidenceSnapshot: snapshot,
+        currentExecution: current ? readExecutionRow(current.execution_id) : null,
+        currentPositioning: currentPositioning?.jd_revision_id === jdRevisionId ? currentPositioning : null,
+      });
+    });
+  }
+
+  async function startExecution(input = {}) {
+    const bundle = createInputGeneration(input);
+    return executionService.execute({
+      ...input,
+      analysis_id: bundle.analysis_id,
+      execution_id: bundle.execution_id,
+      idempotency_key: bundle.idempotency_key,
+      operation_type: bundle.operation_type,
+      schema_version: bundle.schema_version,
+      opportunity_id: bundle.opportunity_id,
+      jd_revision_id: bundle.jd_revision_id,
+      evidence_snapshot_id: bundle.evidence_snapshot_id,
+      evidence_revision_ids: bundle.evidence_revision_ids,
+      input_generation: bundle.input_generation,
+      requested_at: bundle.requested_at,
+      disclosure_classification: bundle.disclosure_classification,
+    });
+  }
+
   return Object.freeze({
     buildEvidenceSnapshot: buildSnapshot,
     createInputGeneration,
@@ -2885,6 +3336,11 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     })),
     savePositioningVersion,
     getPositioningVersion: (positioningVersionId) => run(() => readPositioningVersion(positioningVersionId)),
+    confirmPositioningVersion,
+    getCurrentPositioning,
+    listPositioningVersions,
+    loadContext,
+    startExecution,
     buildExecutionRequest: executionService.buildRequest,
     execute: executionService.execute,
     cancelExecution: executionService.cancel,
@@ -3013,6 +3469,13 @@ function initializeOpportunityEvidenceStore(privateRoot, options = {}) {
       options,
       () => closed,
     );
+    const backup = createBackupOperations({
+      database: store.database,
+      privateRoot,
+      ownership: options.ownership,
+      repositoryRoot: options.repositoryRoot,
+      isClosed: () => closed,
+    });
     const result = {
       metadata: {
         ...store.metadata,
@@ -3028,6 +3491,12 @@ function initializeOpportunityEvidenceStore(privateRoot, options = {}) {
     };
     Object.defineProperty(result, 'intelligence', {
       value: intelligence,
+      enumerable: false,
+      writable: false,
+      configurable: false,
+    });
+    Object.defineProperty(result, 'backup', {
+      value: backup,
       enumerable: false,
       writable: false,
       configurable: false,

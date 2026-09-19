@@ -55,6 +55,52 @@ const PUBLIC_ERROR_MESSAGES = Object.freeze({
   EVIDENCE_REVISION_NOT_FOUND: 'The Evidence revision was not found.',
   DOMAIN_NOT_READY: 'The Opportunity/Evidence substrate is not ready.',
   DOMAIN_OPERATION_FAILED: 'The domain operation failed.',
+  INTELLIGENCE_CONFIRMATION_REQUIRED: 'Positioning requires an explicit user confirmation.',
+  INTELLIGENCE_CANONICAL_INVALID: 'The intelligence input is invalid.',
+  INTELLIGENCE_CLAIM_INVALID: 'The positioning claim is invalid.',
+  INTELLIGENCE_DUPLICATE_ID: 'The intelligence identity is already in use.',
+  INTELLIGENCE_EVIDENCE_IDENTITY_MISMATCH: 'The Evidence identity does not match the selected snapshot.',
+  INTELLIGENCE_EVIDENCE_INELIGIBLE: 'The selected Evidence revision is not eligible for intelligence.',
+  INTELLIGENCE_EVIDENCE_REVISION_MISSING: 'The selected Evidence revision was not found.',
+  INTELLIGENCE_GAP_CLAIM_INVALID: 'The positioning gap claim is invalid.',
+  INTELLIGENCE_GENERATION_MISMATCH: 'The intelligence input generation does not match the selected snapshot.',
+  INTELLIGENCE_IDENTITY_CONFLICT: 'The intelligence identity is already bound to different input.',
+  INTELLIGENCE_IDENTITY_MISMATCH: 'The intelligence identity does not match its input.',
+  INTELLIGENCE_INVALID_INPUT: 'The intelligence input is invalid.',
+  INTELLIGENCE_MATCH_INVALID: 'The intelligence match is invalid.',
+  INTELLIGENCE_POSITIONING_NOT_FOUND: 'The positioning candidate was not found.',
+  INTELLIGENCE_POSITIONING_INVALID: 'The positioning candidate is invalid.',
+  INTELLIGENCE_REQUIREMENT_NOT_FOUND: 'The intelligence requirement was not found.',
+  INTELLIGENCE_REQUIREMENT_NOT_READY: 'The intelligence requirement is not ready.',
+  INTELLIGENCE_RECORD_INVALID: 'The persisted intelligence record is invalid.',
+  INTELLIGENCE_SOURCE_ANCHOR_INVALID: 'The intelligence source anchor is invalid.',
+  INTELLIGENCE_STALE_POSITIONING: 'The positioning candidate is stale for the current input.',
+  INTELLIGENCE_UNKNOWN_STATE: 'The intelligence lifecycle state is unsupported.',
+  INTELLIGENCE_UNKNOWN_TAXONOMY: 'The intelligence taxonomy value is unsupported.',
+  INTELLIGENCE_UNCERTAINTY_INVALID: 'The intelligence uncertainty value is invalid.',
+  INTELLIGENCE_EXECUTION_INVALID: 'The intelligence execution request is invalid.',
+  INTELLIGENCE_EXECUTION_SCHEMA_INVALID: 'The intelligence execution response is invalid.',
+  INTELLIGENCE_DUPLICATE_COMPLETION: 'The intelligence execution already has a different terminal result.',
+  INTELLIGENCE_PROVENANCE_INVALID: 'The intelligence provenance is invalid.',
+  INTELLIGENCE_EVIDENCE_UNAVAILABLE: 'Confirmed Evidence is unavailable for this operation.',
+  INTELLIGENCE_INPUT_NOT_FOUND: 'The intelligence input generation was not found.',
+  EXECUTION_COMPLETION_IN_FLIGHT: 'The execution is still running.',
+  EXECUTION_EVIDENCE_INELIGIBLE: 'Confirmed Evidence is unavailable for this execution.',
+  EXECUTION_NOT_FOUND: 'The execution was not found.',
+  EXECUTION_PROVENANCE_INVALID: 'The execution provenance is invalid.',
+  EXECUTION_SCHEMA_INVALID: 'The execution response is invalid.',
+  EXECUTION_SCHEMA_UNSUPPORTED: 'The execution schema version is unsupported.',
+  EXECUTION_STATUS_UNSUPPORTED: 'The execution status is unsupported.',
+  EXECUTION_UI_STATE_INVALID: 'The execution surface state is invalid.',
+  EXECUTION_UI_STATE_UNSUPPORTED: 'The execution surface state is unsupported.',
+  BACKUP_INVALID: 'The backup bundle is invalid.',
+  BACKUP_INTEGRITY_FAILED: 'The backup integrity check failed.',
+  BACKUP_INCOMPLETE: 'The backup bundle is incomplete.',
+  BACKUP_VERSION_UNSUPPORTED: 'The backup version is unsupported.',
+  BACKUP_DESTINATION_NOT_EMPTY: 'The restore destination must be empty.',
+  BACKUP_RESTORE_FAILED: 'The backup could not be restored safely.',
+  BACKUP_ROOT_BINDING_INVALID: 'The restored root binding is invalid.',
+  BACKUP_NOT_READY: 'The store is not ready for backup.',
 });
 
 function toPublicError(error, fallbackCode = 'FOUNDATION_INIT_FAILED') {
@@ -138,7 +184,7 @@ function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_R
     const substrateAvailable = Boolean(store.opportunity && store.evidence);
     const intelligenceAvailable = Boolean(store.intelligence);
 
-    return {
+    const result = {
       status: toPublicFoundationStatus({
         phase: 'ready',
         foundationPhase: 'ready',
@@ -160,6 +206,21 @@ function bootstrapFoundation({ configPath, argv, env, repositoryRoot = DEFAULT_R
         }
       },
     };
+    if (intelligenceAvailable) {
+      Object.defineProperty(result, 'intelligence', {
+        value: store.intelligence,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+      Object.defineProperty(result, 'backup', {
+        value: store.backup,
+        enumerable: false,
+        writable: false,
+        configurable: false,
+      });
+    }
+    return result;
   } catch (error) {
     try {
       store?.close();

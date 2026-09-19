@@ -1,6 +1,6 @@
 ## Why
 
-M1 now provides the accepted local foundation and the canonical Career Evidence / Opportunity target contracts. The minimum Opportunity/JD and Evidence/revision substrate is implemented and separately accepted in the archived `m1-opportunity-evidence-substrate` change; the full product-domain workflows are not implemented. This change defines the smallest user-visible M2 intelligence slice, with planning acceptance and baseline close-out complete, Batch 1 implementation complete for its 10 scoped tasks, and independent Batch 1 acceptance passed. Batch 2 implementation and independent acceptance are complete for `1.2, 4.1, 4.2, 4.3, 4.4, 4.5, 7.2`; M2 remains in progress and later batches have not started.
+M1 now provides the accepted local foundation and the canonical Career Evidence / Opportunity target contracts. The minimum Opportunity/JD and Evidence/revision substrate is implemented and separately accepted in the archived `m1-opportunity-evidence-substrate` change; the full product-domain workflows are not implemented. This change defines the smallest user-visible M2 intelligence slice, with planning acceptance and baseline close-out complete, Batch 1 implementation complete for its 10 scoped tasks, and independent Batch 1 acceptance passed. Batch 2 implementation is complete for the remaining 8 implementation/validation tasks (`3.4, 5.4, 6.1, 6.2, 6.3, 7.1, 7.3, 7.4`) alongside the accepted execution/service foundation; its independent read-only acceptance is pending. M2 remains in progress and later batches have not started.
 
 ## What Changes
 
@@ -37,9 +37,9 @@ operations, restart/read-back, private-root isolation, and fail-closed
 migration behavior described in its planning artifacts. The planning review for
 this change has passed and the baseline is accepted; Batch 1 implementation is
 complete for its 10 scoped tasks, and its independent read-only acceptance has
-passed. Batch 1 is accepted; Batch 2 implementation and independent acceptance
-are complete for its dependency-complete execution/service tranche. Later
-batches have not started in this run.
+passed. Batch 1 is accepted; Batch 2 implementation is complete for its
+remaining dependency-complete tasks, while independent read-only acceptance is
+pending. Later batches have not started in this run.
 The accepted prerequisite does not imply that full Opportunity or Evidence
 workflows exist.
 

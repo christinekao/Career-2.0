@@ -990,6 +990,7 @@ test('Opportunity/Evidence migration is additive, preserves M1 metadata, and rol
     'intelligence_input_generations',
     'intelligence_matches',
     'intelligence_positioning_claims',
+    'intelligence_positioning_current',
     'intelligence_positioning_versions',
     'intelligence_provenance_edges',
     'intelligence_requirements',

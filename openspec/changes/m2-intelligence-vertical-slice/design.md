@@ -6,16 +6,19 @@ This change remains the first M2 intelligence vertical slice: one selected Oppor
 
 ## Current implementation state
 
-M2 planning is accepted, Batch 1 is accepted, and the dependency-complete
-Batch 2 execution/service tranche (`1.2, 4.1, 4.2, 4.3, 4.4, 4.5, 7.2`) is
-implementation-complete and independently accepted. The tranche
-uses the existing application-owned in-process executor seam and additive
-intelligence persistence; no provider/model/dependency, preload, renderer, or
-public IPC capability was added. The executor seam is promise-returning and
-non-blocking, receives an execution-bound AbortSignal, and is bounded by the
-service timeout/grace policy. Superseded retries, interrupted persisted runs,
-and malformed persisted candidates fail closed without replacing current
-results. M2 remains `IN_PROGRESS`; later batches have not started.
+M2 planning is accepted, Batch 1 is accepted, and Batch 2 implementation is
+complete for the remaining `3.4, 5.4, 6.1, 6.2, 6.3, 7.1, 7.3, 7.4` tasks in
+addition to the accepted dependency-complete execution/service tranche
+(`1.2, 4.1, 4.2, 4.3, 4.4, 4.5, 7.2`). The implementation uses the existing
+application-owned in-process executor seam and additive intelligence
+persistence, extends the sole backup authority, and adds only purpose-specific
+preload/renderer operations for the minimal Opportunity context surface. The
+executor seam is promise-returning and non-blocking, receives an
+execution-bound AbortSignal, and is bounded by the service timeout/grace
+policy. Superseded retries, interrupted persisted runs, malformed persisted
+candidates, stale positioning, and invalid backup material fail closed without
+replacing current results. Independent read-only Batch 2 acceptance is
+pending; M2 remains `IN_PROGRESS` and later batches have not started.
 
 ## Goals / Non-Goals
 
@@ -49,8 +52,8 @@ fail-closed behavior. The planning repair and read-only planning review for
 this change are complete; the baseline is accepted, Batch 1 implementation is
 complete for its 10 scoped tasks, and the independent read-only Batch 1
 acceptance has passed. Batch 1 is accepted; later apply work remains separate
-and Batch 2 execution/service implementation and independent acceptance are
-complete; later batches have not started in this run.
+and Batch 2 implementation is complete pending independent acceptance; later
+batches have not started in this run.
 
 ### 2. M2 owns the minimal Opportunity selection/context surface
 
@@ -265,10 +268,10 @@ different valid state.
 
 ## Risks / Trade-offs
 
-- **[M2 planning accepted; Batch 1 accepted; Batch 2 accepted]** → Keep later batches separate from the accepted Batch 1 boundary; Batch 2 remains limited to the accepted execution/service tranche even though the substrate prerequisite and planning gate are satisfied.
+- **[M2 planning accepted; Batch 1 accepted; Batch 2 implementation complete]** → Keep the independent Batch 2 acceptance separate from implementation; later batches remain outside the current change even though the substrate prerequisite and planning gate are satisfied.
 - **[A model changes wording between retries]** → Stable identities use immutable source/input anchors; payload changes create a new result/version or fail validation rather than silently relinking history.
 - **[A partial or late response contaminates state]** → Persist only terminal execution metadata for non-success responses; compare generation and idempotency before publication.
-- **[M2 records are omitted from backup]** → Keep backup ownership in the existing capability and block M2 acceptance until complete-store coverage is demonstrated.
+- **[M2 records are omitted from backup]** → Keep backup ownership in the sole application capability; Batch 2 now validates complete M1/M2 store coverage, provenance references, schema metadata, new-root restore, and no-silent-merge before independent acceptance.
 - **[Detailed contract grows into a provider framework]** → Keep one task-shaped executor and a finite contract; provider selection is a separate gate and no adapter/router is introduced.
 - **[Known M1 threat boundary is misunderstood]** → Preserve the approved same-user active path-swap TOCTOU limitation as a known non-goal/future hardening item; this change does not claim to fix it.
 

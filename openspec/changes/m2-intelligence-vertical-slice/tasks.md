@@ -1,7 +1,7 @@
 ## 1. Preconditions and capability gate
 
 - [x] 1.1 Record and use the accepted archived `m1-opportunity-evidence-substrate` evidence, including Opportunity/JD revision and confirmed Evidence/revision operations, restart/read-back, isolation, and fail-closed behavior; use this as the implementation precondition after the accepted planning baseline, without treating planning close-out as implementation progress.
-- [ ] 1.2 Record one approved existing executor capability with its finite operation input/output, privacy/disclosure behavior, timeout/limit, failure/retry, cost, and exit behavior; do not install or change a dependency, provider, model, or version.
+- [x] 1.2 Record one approved existing executor capability with its finite operation input/output, privacy/disclosure behavior, timeout/limit, failure/retry, cost, and exit behavior; do not install or change a dependency, provider, model, or version.
 
 ## 2. Input, identity, and requirement contract
 
@@ -18,11 +18,11 @@
 
 ## 4. Provider-independent execution contract
 
-- [ ] 4.1 Implement the finite request/response schema with execution/idempotency identity, operation/schema version, input generation, allowlisted payload, disclosure classification, result status, validation status, structured payload, and safe error classification.
-- [ ] 4.2 Define and test `MALFORMED`, `SCHEMA_INVALID`, and `PARTIAL` handling; reject incomplete/private payloads as usable candidates and preserve the last valid state.
-- [ ] 4.3 Enforce a positive finite timeout below an application maximum and an execution-bound cancellation request with finite acknowledgement/grace handling; ignore late results after terminal cancellation.
-- [ ] 4.4 Define finite retry maximum and eligibility for timeout, unavailable, and explicitly retryable provider failures; prevent automatic retry for malformed, schema-invalid, stale, duplicate, and non-retryable results.
-- [ ] 4.5 Enforce idempotent duplicate completion handling and compare Opportunity/JD/Evidence/schema/generation before publication; retain or mark stale results without overwriting newer work or creating duplicate canonical records.
+- [x] 4.1 Implement the finite request/response schema with execution/idempotency identity, operation/schema version, input generation, allowlisted payload, disclosure classification, result status, validation status, structured payload, and safe error classification.
+- [x] 4.2 Define and test `MALFORMED`, `SCHEMA_INVALID`, and `PARTIAL` handling; reject incomplete/private payloads as usable candidates and preserve the last valid state.
+- [x] 4.3 Enforce a positive finite timeout below an application maximum and an execution-bound cancellation request with finite acknowledgement/grace handling; ignore late results after terminal cancellation.
+- [x] 4.4 Define finite retry maximum and eligibility for timeout, unavailable, and explicitly retryable provider failures; prevent automatic retry for malformed, schema-invalid, stale, duplicate, and non-retryable results.
+- [x] 4.5 Enforce idempotent duplicate completion handling and compare Opportunity/JD/Evidence/schema/generation before publication; retain or mark stale results without overwriting newer work or creating duplicate canonical records.
 
 ## 5. Persistence, migration, and backup authority
 
@@ -40,7 +40,7 @@
 ## 7. Deterministic validation and acceptance
 
 - [ ] 7.1 Add isolated synthetic fixtures for every identity/provenance edge, requirement uncertainty/status, all five taxonomy outcomes, many-to-many evidence, ambiguity, missing JD, unsupported claims, versioning, and no automatic Evidence promotion; include a confirmed-Evidence positive fixture, draft/unconfirmed rejection, no-confirmed/unavailable behavior, end-to-end confirmed traceability, and unknown taxonomy/lifecycle states that fail closed.
-- [ ] 7.2 Add a controllable executor test seam covering valid output, malformed/schema-invalid/partial output, timeout, cancellation/late result, unavailable/provider failure, bounded retry, duplicate completion, stale generation, disclosure scope, unknown execution status, unknown content/execution UI states, and deterministic content/execution UI-state projections for both surfaces.
+- [x] 7.2 Add a controllable executor test seam covering valid output, malformed/schema-invalid/partial output, timeout, cancellation/late result, unavailable/provider failure, bounded retry, duplicate completion, stale generation, disclosure scope, unknown execution status, unknown content/execution UI states, and deterministic content/execution UI-state projections for both surfaces.
 - [ ] 7.3 Validate additive migration success/failure, M1 preservation, domain persistence/restart/read-back, backup/restore coverage, renderer capability absence, private-root isolation, repository/log privacy, no private data in source-controlled paths, confirmed Evidence snapshot eligibility, and rejection of ineligible revisions before executor input.
 - [ ] 7.4 Run one bounded real Opportunity vertical-slice acceptance from the M2-owned selection/context surface through an accepted selected JD and confirmed Evidence substrate, analysis, matching, reviewable positioning, explicit confirmation, restart/read-back, and controlled failure recovery; verify missing-selection/unavailable handling, current-result preservation on cancellation/failure, stale-result rejection, and use synthetic/private-root data only.
 - [ ] 7.5 Run scoped final validation and review the complete diff: affected foundation checks, syntax/build, OpenSpec strict validation, privacy/mutation checks, and M2 acceptance; update only affected current-state documents and stop before later M2 slices.

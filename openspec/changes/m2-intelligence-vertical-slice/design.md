@@ -4,6 +4,19 @@ The accepted M1 foundation supplies the local Electron shell, configured private
 
 This change remains the first M2 intelligence vertical slice: one selected Opportunity, one JD revision, a fixed Evidence snapshot, explainable matching/gaps, and reviewable positioning. It does not implement or assume the rest of the M1 Workspace or the complete M2 MVP.
 
+## Current implementation state
+
+M2 planning is accepted, Batch 1 is accepted, and the dependency-complete
+Batch 2 execution/service tranche (`1.2, 4.1, 4.2, 4.3, 4.4, 4.5, 7.2`) is
+implementation-complete and independently accepted. The tranche
+uses the existing application-owned in-process executor seam and additive
+intelligence persistence; no provider/model/dependency, preload, renderer, or
+public IPC capability was added. The executor seam is promise-returning and
+non-blocking, receives an execution-bound AbortSignal, and is bounded by the
+service timeout/grace policy. Superseded retries, interrupted persisted runs,
+and malformed persisted candidates fail closed without replacing current
+results. M2 remains `IN_PROGRESS`; later batches have not started.
+
 ## Goals / Non-Goals
 
 **Goals:**
@@ -36,7 +49,8 @@ fail-closed behavior. The planning repair and read-only planning review for
 this change are complete; the baseline is accepted, Batch 1 implementation is
 complete for its 10 scoped tasks, and the independent read-only Batch 1
 acceptance has passed. Batch 1 is accepted; later apply work remains separate
-and Batch 2 has not started in this run.
+and Batch 2 execution/service implementation and independent acceptance are
+complete; later batches have not started in this run.
 
 ### 2. M2 owns the minimal Opportunity selection/context surface
 
@@ -251,7 +265,7 @@ different valid state.
 
 ## Risks / Trade-offs
 
-- **[M2 planning accepted; Batch 1 accepted]** → Keep later batches separate from the accepted Batch 1 boundary; Batch 2 has not started in this run, even though the substrate prerequisite and planning gate are satisfied.
+- **[M2 planning accepted; Batch 1 accepted; Batch 2 accepted]** → Keep later batches separate from the accepted Batch 1 boundary; Batch 2 remains limited to the accepted execution/service tranche even though the substrate prerequisite and planning gate are satisfied.
 - **[A model changes wording between retries]** → Stable identities use immutable source/input anchors; payload changes create a new result/version or fail validation rather than silently relinking history.
 - **[A partial or late response contaminates state]** → Persist only terminal execution metadata for non-success responses; compare generation and idempotency before publication.
 - **[M2 records are omitted from backup]** → Keep backup ownership in the existing capability and block M2 acceptance until complete-store coverage is demonstrated.

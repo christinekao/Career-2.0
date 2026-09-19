@@ -28,6 +28,15 @@ const {
 } = require('./intelligence.cjs');
 
 const {
+  EXECUTION_STATES,
+  RESULT_STATUSES,
+  VALIDATION_STATUSES,
+  buildExecutionRequest,
+  createExecutionService,
+  normalizeExecutionResponse,
+} = require('./execution.cjs');
+
+const {
   PrivateRootError,
   assertFoundationFileSafe,
   assertPrivateRootStable,
@@ -549,6 +558,63 @@ const INTELLIGENCE_SCHEMA_CONTRACT = {
         'schema_version >= 1',
       ],
     },
+    intelligence_executions: {
+      columns: [
+        { name: 'execution_id', type: 'TEXT', notNull: true, primaryKey: true },
+        { name: 'analysis_id', type: 'TEXT', notNull: true },
+        { name: 'idempotency_key', type: 'TEXT', notNull: true },
+        { name: 'opportunity_id', type: 'TEXT', notNull: true },
+        { name: 'jd_revision_id', type: 'TEXT', notNull: true },
+        { name: 'evidence_snapshot_id', type: 'TEXT', notNull: true },
+        { name: 'input_generation', type: 'TEXT', notNull: true },
+        { name: 'operation_type', type: 'TEXT', notNull: true },
+        { name: 'schema_version', type: 'INTEGER', notNull: true },
+        { name: 'requested_at', type: 'TEXT', notNull: true },
+        { name: 'disclosure_classification', type: 'TEXT', notNull: true },
+        { name: 'request_payload_json', type: 'TEXT', notNull: true },
+        { name: 'attempt', type: 'INTEGER', notNull: true },
+        { name: 'max_attempts', type: 'INTEGER', notNull: true },
+        { name: 'execution_state', type: 'TEXT', notNull: true },
+        { name: 'result_status', type: 'TEXT', notNull: false },
+        { name: 'validation_status', type: 'TEXT', notNull: true },
+        { name: 'result_payload_json', type: 'TEXT', notNull: false },
+        { name: 'error_json', type: 'TEXT', notNull: false },
+        { name: 'cancel_requested_at', type: 'TEXT', notNull: false },
+        { name: 'cancellation_acknowledged', type: 'INTEGER', notNull: false },
+        { name: 'superseded_by_execution_id', type: 'TEXT', notNull: false },
+        { name: 'is_current', type: 'INTEGER', notNull: true },
+        { name: 'created_at', type: 'TEXT', notNull: true },
+        { name: 'updated_at', type: 'TEXT', notNull: true },
+        { name: 'completed_at', type: 'TEXT', notNull: false },
+      ],
+      uniqueConstraints: [['idempotency_key']],
+      foreignKeys: [
+        {
+          columns: ['analysis_id'],
+          referencedTable: 'intelligence_input_generations',
+          referencedColumns: ['analysis_id'],
+          onDelete: 'RESTRICT',
+        },
+        {
+          columns: ['evidence_snapshot_id'],
+          referencedTable: 'intelligence_evidence_snapshots',
+          referencedColumns: ['evidence_snapshot_id'],
+          onDelete: 'RESTRICT',
+        },
+      ],
+      checks: [
+        "operation_type IN ('ANALYZE_REQUIREMENTS', 'CLASSIFY_MATCHES', 'DRAFT_POSITIONING')",
+        'schema_version >= 1',
+        "execution_state IN ('RUNNING', 'COMPLETED', 'CANCELLED', 'FAILED', 'STALE_RESULT_REJECTED')",
+        "(result_status IS NULL OR result_status IN ('SUCCEEDED', 'FAILED', 'CANCELLED', 'TIMED_OUT', 'UNAVAILABLE', 'PROVIDER_FAILURE', 'MALFORMED', 'SCHEMA_INVALID', 'PARTIAL', 'STALE', 'DUPLICATE'))",
+        "validation_status IN ('VALID', 'INVALID', 'NOT_RUN')",
+        'attempt >= 0',
+        'max_attempts >= 1',
+        'attempt <= max_attempts',
+        '(cancellation_acknowledged IS NULL OR cancellation_acknowledged IN (0, 1))',
+        'is_current IN (0, 1)',
+      ],
+    },
     intelligence_requirements: {
       columns: [
         { name: 'requirement_id', type: 'TEXT', notNull: true, primaryKey: true },
@@ -718,6 +784,8 @@ const INTELLIGENCE_SCHEMA_CONTRACT = {
   indexes: [
     { name: 'intelligence_input_execution_idx', table: 'intelligence_input_generations', unique: true, columns: ['execution_id'] },
     { name: 'intelligence_input_idempotency_idx', table: 'intelligence_input_generations', unique: true, columns: ['idempotency_key'] },
+    { name: 'intelligence_execution_opportunity_idx', table: 'intelligence_executions', unique: false, columns: ['opportunity_id', 'operation_type', 'created_at'] },
+    { name: 'intelligence_execution_current_idx', table: 'intelligence_executions', unique: false, columns: ['opportunity_id', 'operation_type', 'is_current'] },
     { name: 'intelligence_requirements_jd_idx', table: 'intelligence_requirements', unique: false, columns: ['jd_revision_id'] },
     { name: 'intelligence_matches_requirement_idx', table: 'intelligence_matches', unique: false, columns: ['requirement_id', 'evidence_snapshot_id'] },
     { name: 'intelligence_positioning_opportunity_idx', table: 'intelligence_positioning_versions', unique: false, columns: ['opportunity_id', 'version_number'] },
@@ -750,6 +818,33 @@ function renderIntelligenceSchemaSql() {
     + `ON ${sqlIdentifier(index.table)} (${index.columns.map(sqlIdentifier).join(', ')});`
   ));
   return [...tableStatements, ...indexStatements].join('\n');
+}
+
+function renderIntelligenceExecutionSchemaSql() {
+  const contract = INTELLIGENCE_SCHEMA_CONTRACT.tables.intelligence_executions;
+  const definitions = contract.columns.map((column) => {
+    const parts = [sqlIdentifier(column.name), column.type];
+    if (column.primaryKey) parts.push('PRIMARY KEY');
+    if (column.notNull) parts.push('NOT NULL');
+    return parts.join(' ');
+  });
+  for (const columns of contract.uniqueConstraints) definitions.push(`UNIQUE (${columns.map(sqlIdentifier).join(', ')})`);
+  for (const foreignKey of contract.foreignKeys) {
+    definitions.push(
+      `FOREIGN KEY (${foreignKey.columns.map(sqlIdentifier).join(', ')}) REFERENCES `
+      + `${sqlIdentifier(foreignKey.referencedTable)} (${foreignKey.referencedColumns.map(sqlIdentifier).join(', ')}) `
+      + `ON DELETE ${foreignKey.onDelete}`,
+    );
+  }
+  for (const check of contract.checks) definitions.push(`CHECK (${check})`);
+  const tableStatement = `CREATE TABLE IF NOT EXISTS "intelligence_executions" (\n  ${definitions.join(',\n  ')}\n);`;
+  const indexStatements = INTELLIGENCE_SCHEMA_CONTRACT.indexes
+    .filter((index) => index.table === 'intelligence_executions')
+    .map((index) => (
+      `CREATE ${index.unique ? 'UNIQUE ' : ''}INDEX IF NOT EXISTS ${sqlIdentifier(index.name)} `
+      + `ON ${sqlIdentifier(index.table)} (${index.columns.map(sqlIdentifier).join(', ')});`
+    ));
+  return [tableStatement, ...indexStatements].join('\n');
 }
 
 function readIntelligenceSchemaVersion(database) {
@@ -897,6 +992,67 @@ function assertIntelligenceDataIntegrity(database) {
     return rebuilt;
   };
 
+  const validateStoredExecutionCandidate = (request, payload) => {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) invalidData('Intelligence execution candidate payload is not structured.');
+    const allowed = new Set(['requirements', 'matches', 'positioning']);
+    if (Object.keys(payload).some((key) => !allowed.has(key))) invalidData('Intelligence execution candidate contains an unsupported field.');
+    const snapshot = loadSnapshot(database.prepare('SELECT * FROM intelligence_evidence_snapshots WHERE evidence_snapshot_id = ?').get(request.evidence_snapshot_id));
+    const jd = database.prepare('SELECT content, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(request.jd_revision_id);
+    if (!jd || jd.availability_status !== 'AVAILABLE') invalidData('Intelligence execution candidate JD is unavailable.');
+    const requirements = Array.isArray(payload.requirements) ? payload.requirements.map((item) => {
+      let requirement;
+      try {
+        requirement = validateRequirement(item);
+      } catch (error) {
+        invalidData(`Intelligence execution requirement is invalid: ${error.message}`);
+      }
+      if (!requirement.ready || requirement.jd_revision_id !== request.jd_revision_id || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content, request.jd_revision_id)) {
+        invalidData('Intelligence execution requirement is unavailable or its source anchor is not resolvable.');
+      }
+      return requirement;
+    }) : [];
+    const requirementMap = new Map(requirements.map((item) => [item.requirement_id, item]));
+    const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => {
+      const requirement = requirementMap.get(resolveAliasedField(item, 'requirement_id', 'requirementId', 'requirement_id'));
+      if (!requirement) invalidData('Intelligence execution match is missing its candidate requirement.');
+      try {
+        const match = validateMatchRecord(item, snapshot, requirement);
+        validateTraceability({
+          jdSourceRef: requirement.source_ref,
+          jdRevisionId: requirement.jd_revision_id,
+          requirement,
+          match,
+          snapshot,
+        });
+        return match;
+      } catch (error) {
+        invalidData(`Intelligence execution match is invalid: ${error.message}`);
+      }
+    }) : [];
+    if (request.operation_type === 'ANALYZE_REQUIREMENTS' && !Array.isArray(payload.requirements)) invalidData('Requirement analysis output is missing requirements.');
+    if (request.operation_type === 'CLASSIFY_MATCHES' && !Array.isArray(payload.matches)) invalidData('Match classification output is missing matches.');
+    if (payload.positioning !== undefined) {
+      if (!payload.positioning || typeof payload.positioning !== 'object' || Array.isArray(payload.positioning) || !Array.isArray(payload.positioning.claims)) invalidData('Positioning candidate is invalid.');
+      const analysis = database.prepare('SELECT analysis_id FROM intelligence_input_generations WHERE execution_id = ?').get(request.execution_id);
+      try {
+        validatePositioningVersion({
+          ...payload.positioning,
+          opportunity_id: request.opportunity_id,
+          jd_revision_id: request.jd_revision_id,
+          analysis_id: analysis?.analysis_id,
+          evidence_snapshot_id: request.evidence_snapshot_id,
+          input_generation: request.input_generation,
+          evidence_snapshot: snapshot,
+          requirements,
+          matches,
+        });
+      } catch (error) {
+        invalidData(`Intelligence execution positioning candidate is invalid: ${error.message}`);
+      }
+    }
+    if (request.operation_type === 'DRAFT_POSITIONING' && payload.positioning === undefined) invalidData('Positioning output is missing a candidate.');
+  };
+
   const orphanClaims = database.prepare(`
     SELECT c.positioning_claim_id
       FROM intelligence_positioning_claims c
@@ -946,6 +1102,88 @@ function assertIntelligenceDataIntegrity(database) {
       if (expected.analysis_id !== row.analysis_id) invalidData('Intelligence analysis identity is invalid.');
     } catch (error) {
       invalidData(`Intelligence input generation is invalid: ${error.message}`);
+    }
+  }
+
+  for (const row of database.prepare('SELECT * FROM intelligence_executions').all()) {
+    const analysis = database.prepare('SELECT * FROM intelligence_input_generations WHERE analysis_id = ?').get(row.analysis_id);
+    if (!analysis
+      || row.execution_id !== analysis.execution_id
+      || row.idempotency_key !== analysis.idempotency_key
+      || row.opportunity_id !== analysis.opportunity_id
+      || row.jd_revision_id !== analysis.jd_revision_id
+      || row.evidence_snapshot_id !== analysis.evidence_snapshot_id
+      || row.input_generation !== analysis.input_generation
+      || row.operation_type !== analysis.operation_type
+      || row.schema_version !== analysis.schema_version
+      || row.requested_at !== analysis.requested_at
+      || row.disclosure_classification !== analysis.disclosure_classification) {
+      invalidData('Intelligence execution identity is inconsistent with its immutable input generation.');
+    }
+    const payload = parseRecordJson(row.request_payload_json, 'execution request payload');
+    let request;
+    try {
+      request = buildExecutionRequest({
+        inputBundle: {
+          execution_id: analysis.execution_id,
+          idempotency_key: analysis.idempotency_key,
+          operation_type: analysis.operation_type,
+          schema_version: analysis.schema_version,
+          opportunity_id: analysis.opportunity_id,
+          jd_revision_id: analysis.jd_revision_id,
+          evidence_snapshot_id: analysis.evidence_snapshot_id,
+          evidence_revision_ids: parseRecordJson(analysis.evidence_revision_ids_json, 'execution input revisions'),
+          input_generation: analysis.input_generation,
+          requested_at: analysis.requested_at,
+          disclosure_classification: analysis.disclosure_classification,
+        },
+        payload,
+      });
+    } catch (error) {
+      invalidData(`Intelligence execution request is invalid: ${error.message}`);
+    }
+    if (row.attempt < 0 || row.max_attempts < 1 || row.attempt > row.max_attempts) invalidData('Intelligence execution attempt bounds are invalid.');
+    if (!EXECUTION_STATES.includes(row.execution_state)) invalidData('Intelligence execution state is unsupported.');
+    if (row.result_status !== null && !RESULT_STATUSES.includes(row.result_status)) invalidData('Intelligence execution result status is unsupported.');
+    if (!VALIDATION_STATUSES.includes(row.validation_status)) invalidData('Intelligence execution validation status is unsupported.');
+    if (row.error_json !== null) {
+      const error = parseRecordJson(row.error_json, 'execution error');
+      if (!error || typeof error !== 'object' || typeof error.classification !== 'string' || typeof error.retryable !== 'boolean') invalidData('Intelligence execution error metadata is invalid.');
+    }
+    if (row.result_payload_json !== null) {
+      if (row.result_status !== 'SUCCEEDED' || row.validation_status !== 'VALID') invalidData('Intelligence execution result payload is not bound to a valid completion.');
+      validateStoredExecutionCandidate(request, parseRecordJson(row.result_payload_json, 'execution result payload'));
+    }
+    if (row.result_status === 'SUCCEEDED' && row.execution_state !== 'COMPLETED') {
+      invalidData('Successful execution results require the COMPLETED execution state.');
+    }
+    if (row.execution_state === 'COMPLETED' && row.result_status !== 'SUCCEEDED') invalidData('Completed execution must have a successful result.');
+    if (row.execution_state === 'CANCELLED' && row.result_status !== 'CANCELLED') invalidData('Cancelled execution must have a cancelled result.');
+    if (row.execution_state === 'STALE_RESULT_REJECTED' && row.result_status !== 'STALE') invalidData('Stale execution must have a stale result.');
+    if (row.is_current === 1 && (row.execution_state !== 'COMPLETED' || row.result_status !== 'SUCCEEDED')) invalidData('Only a successful completed execution may be current.');
+    if (row.superseded_by_execution_id !== null
+      && !database.prepare('SELECT execution_id FROM intelligence_executions WHERE execution_id = ?').get(row.superseded_by_execution_id)) {
+      invalidData('Intelligence execution supersession reference is invalid.');
+    }
+    if (row.execution_state !== 'RUNNING') {
+      try {
+        normalizeExecutionResponse({
+          execution_id: request.execution_id,
+          idempotency_key: request.idempotency_key,
+          operation_type: request.operation_type,
+          schema_version: request.schema_version,
+          opportunity_id: request.opportunity_id,
+          jd_revision_id: request.jd_revision_id,
+          evidence_snapshot_id: request.evidence_snapshot_id,
+          input_generation: request.input_generation,
+          result_status: row.result_status,
+          validation_status: row.validation_status,
+          ...(row.result_payload_json === null ? {} : { payload: parseRecordJson(row.result_payload_json, 'execution result payload') }),
+          ...(row.error_json === null ? {} : { error: parseRecordJson(row.error_json, 'execution error') }),
+        }, request);
+      } catch (error) {
+        invalidData(`Intelligence execution response is invalid: ${error.message}`);
+      }
     }
   }
 
@@ -1136,7 +1374,14 @@ function migrateIntelligenceSchema(database, options = {}) {
     );
   }
   if (currentVersion === INTELLIGENCE_SCHEMA_VERSION) {
-    assertIntelligenceSchema(database);
+    const upgradeExisting = database.transaction(() => {
+      assertMigrationOwnership(options.privateRoot, options.ownership, options);
+      database.exec(renderIntelligenceExecutionSchemaSql());
+      runMigrationCheckpoint(options, 'intelligence-after-execution-schema');
+      assertMigrationOwnership(options.privateRoot, options.ownership, options);
+      assertIntelligenceSchema(database);
+    });
+    upgradeExisting();
     assertMigrationOwnership(options.privateRoot, options.ownership, options);
     return;
   }
@@ -1838,6 +2083,465 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     });
   }
 
+  function executionNow(value) {
+    const timestamp = value === undefined ? new Date().toISOString() : value;
+    if (typeof timestamp !== 'string' || Number.isNaN(Date.parse(timestamp))) {
+      throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_INVALID', 'Execution timestamp is invalid.');
+    }
+    return new Date(timestamp).toISOString();
+  }
+
+  function recoverInterruptedExecutions() {
+    const updatedAt = executionNow();
+    database.prepare(`
+      UPDATE intelligence_executions
+         SET execution_state = 'FAILED', result_status = 'UNAVAILABLE',
+             validation_status = 'NOT_RUN', result_payload_json = NULL,
+             error_json = ?, is_current = 0, updated_at = ?, completed_at = ?
+       WHERE execution_state = 'RUNNING'
+    `).run(
+      canonicalSerialize({
+        classification: 'UNAVAILABLE',
+        message: 'Execution was interrupted before completion; a new bounded execution is required.',
+        retryable: false,
+      }),
+      updatedAt,
+      updatedAt,
+    );
+  }
+
+  recoverInterruptedExecutions();
+
+  function readExecutionRow(executionId) {
+    const row = database.prepare('SELECT * FROM intelligence_executions WHERE execution_id = ?').get(executionId);
+    if (!row) return null;
+    const analysis = database.prepare('SELECT * FROM intelligence_input_generations WHERE analysis_id = ?').get(row.analysis_id);
+    if (!analysis) throw new FoundationPersistenceError('INTELLIGENCE_RECORD_INVALID', 'Execution input generation does not exist.');
+    const payload = intelligenceStoredJson(row.request_payload_json, 'request_payload_json');
+    const request = buildExecutionRequest({
+      inputBundle: {
+        execution_id: analysis.execution_id,
+        idempotency_key: analysis.idempotency_key,
+        operation_type: analysis.operation_type,
+        schema_version: analysis.schema_version,
+        opportunity_id: analysis.opportunity_id,
+        jd_revision_id: analysis.jd_revision_id,
+        evidence_snapshot_id: analysis.evidence_snapshot_id,
+        evidence_revision_ids: intelligenceStoredJson(analysis.evidence_revision_ids_json, 'evidence_revision_ids_json'),
+        input_generation: analysis.input_generation,
+        requested_at: analysis.requested_at,
+        disclosure_classification: analysis.disclosure_classification,
+      },
+      payload,
+    });
+    return Object.freeze({
+      execution_id: row.execution_id,
+      analysis_id: row.analysis_id,
+      idempotency_key: row.idempotency_key,
+      opportunity_id: row.opportunity_id,
+      jd_revision_id: row.jd_revision_id,
+      evidence_snapshot_id: row.evidence_snapshot_id,
+      input_generation: row.input_generation,
+      operation_type: row.operation_type,
+      schema_version: row.schema_version,
+      requested_at: row.requested_at,
+      disclosure_classification: row.disclosure_classification,
+      attempt: row.attempt,
+      max_attempts: row.max_attempts,
+      execution_state: row.execution_state,
+      result_status: row.result_status,
+      validation_status: row.validation_status,
+      result_payload: row.result_payload_json === null ? null : intelligenceStoredJson(row.result_payload_json, 'result_payload_json'),
+      error: row.error_json === null ? null : intelligenceStoredJson(row.error_json, 'error_json'),
+      cancel_requested_at: row.cancel_requested_at,
+      cancellation_acknowledged: row.cancellation_acknowledged === null ? null : Boolean(row.cancellation_acknowledged),
+      superseded_by_execution_id: row.superseded_by_execution_id,
+      is_current: Boolean(row.is_current),
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      completed_at: row.completed_at,
+      request,
+    });
+  }
+
+  function executionInputFor(input = {}) {
+    const analysisId = input.analysis_id ?? input.analysisId;
+    const executionId = input.execution_id ?? input.executionId;
+    const idempotencyKey = input.idempotency_key ?? input.idempotencyKey;
+    let row = analysisId
+      ? database.prepare('SELECT * FROM intelligence_input_generations WHERE analysis_id = ?').get(analysisId)
+      : null;
+    if (!row && executionId) row = database.prepare('SELECT * FROM intelligence_input_generations WHERE execution_id = ?').get(executionId);
+    if (!row && idempotencyKey) row = database.prepare('SELECT * FROM intelligence_input_generations WHERE idempotency_key = ?').get(idempotencyKey);
+    if (!row) throw new FoundationPersistenceError('INTELLIGENCE_INPUT_NOT_FOUND', 'Execution requires an existing immutable input generation.');
+    if (analysisId && row.analysis_id !== analysisId) throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution analysis identity does not match the immutable input generation.');
+    if (executionId && row.execution_id !== executionId) throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution identity does not match the immutable input generation.');
+    if (idempotencyKey && row.idempotency_key !== idempotencyKey) throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution idempotency identity does not match the immutable input generation.');
+    return row;
+  }
+
+  function executionPayloadForInput(row) {
+    const jd = database.prepare('SELECT jd_revision_id, content, source_ref, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(row.jd_revision_id);
+    if (!jd || jd.availability_status !== 'AVAILABLE' || typeof jd.content !== 'string' || jd.content.length === 0) {
+      throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Execution JD input is unavailable.');
+    }
+    const snapshot = readSnapshot(row.evidence_snapshot_id);
+    return {
+      jd: {
+        jd_revision_id: jd.jd_revision_id,
+        content: jd.content,
+        source_ref: jd.source_ref,
+      },
+      evidence: snapshot.evidence_revisions.map((revision) => ({
+        evidence_revision_id: revision.evidence_revision_id,
+        evidence_id: revision.evidence_id,
+        factual_content: revision.factual_content,
+        responsibility_boundary: revision.responsibility_boundary,
+        outcome: revision.outcome,
+        provenance: revision.provenance,
+      })),
+    };
+  }
+
+  function requestForExecutionInput(row) {
+    return buildExecutionRequest({
+      inputBundle: {
+        execution_id: row.execution_id,
+        idempotency_key: row.idempotency_key,
+        operation_type: row.operation_type,
+        schema_version: row.schema_version,
+        opportunity_id: row.opportunity_id,
+        jd_revision_id: row.jd_revision_id,
+        evidence_snapshot_id: row.evidence_snapshot_id,
+        evidence_revision_ids: intelligenceStoredJson(row.evidence_revision_ids_json, 'evidence_revision_ids_json'),
+        input_generation: row.input_generation,
+        requested_at: row.requested_at,
+        disclosure_classification: row.disclosure_classification,
+      },
+      payload: executionPayloadForInput(row),
+    });
+  }
+
+  function validateExecutionCandidate(request, payload) {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Execution candidate payload must be structured.');
+    const allowed = new Set(['requirements', 'matches', 'positioning']);
+    if (Object.keys(payload).some((key) => !allowed.has(key))) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Execution candidate payload contains an unsupported field.');
+    const snapshot = readSnapshot(request.evidence_snapshot_id);
+    const jd = database.prepare('SELECT content, availability_status FROM jd_revisions WHERE jd_revision_id = ?').get(request.jd_revision_id);
+    if (!jd || jd.availability_status !== 'AVAILABLE') throw new FoundationPersistenceError('INTELLIGENCE_UNAVAILABLE', 'Execution candidate JD is unavailable.');
+    const requirements = Array.isArray(payload.requirements) ? payload.requirements.map((item) => {
+      const requirement = validateRequirement(item);
+      if (!requirement.ready || requirement.jd_revision_id !== request.jd_revision_id || !intelligenceSourceResolvesToJd(requirement.source_ref, jd.content, request.jd_revision_id)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution requirement is not resolvable to the selected JD revision.');
+      }
+      return requirement;
+    }) : [];
+    const requirementMap = new Map(requirements.map((item) => [item.requirement_id, item]));
+    const matches = Array.isArray(payload.matches) ? payload.matches.map((item) => {
+      const requirement = requirementMap.get(resolveAliasedField(item, 'requirement_id', 'requirementId', 'requirement_id'));
+      if (!requirement) throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution match is missing its candidate requirement.');
+      const match = validateMatchRecord(item, snapshot, requirement);
+      const trace = validateTraceability({
+        jdSourceRef: requirement.source_ref,
+        jdRevisionId: requirement.jd_revision_id,
+        requirement,
+        match,
+        snapshot,
+      });
+      return { ...match, provenance_edges: trace.provenance_edges };
+    }) : [];
+    if (request.operation_type === 'ANALYZE_REQUIREMENTS' && !Array.isArray(payload.requirements)) {
+      throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Requirement analysis output must contain requirements.');
+    }
+    if (request.operation_type === 'CLASSIFY_MATCHES' && !Array.isArray(payload.matches)) {
+      throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Match classification output must contain matches.');
+    }
+    let positioning;
+    if (payload.positioning !== undefined) {
+      if (!payload.positioning || typeof payload.positioning !== 'object' || Array.isArray(payload.positioning)) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Positioning candidate must be structured.');
+      if (!Array.isArray(payload.positioning.claims)) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Positioning candidate claims must be an array.');
+      const analysis = database.prepare('SELECT analysis_id FROM intelligence_input_generations WHERE execution_id = ?').get(request.execution_id);
+      positioning = validatePositioningVersion({
+        ...payload.positioning,
+        opportunity_id: request.opportunity_id,
+        jd_revision_id: request.jd_revision_id,
+        analysis_id: analysis?.analysis_id,
+        evidence_snapshot_id: request.evidence_snapshot_id,
+        input_generation: request.input_generation,
+        evidence_snapshot: snapshot,
+        requirements,
+        matches,
+      });
+    }
+    if (request.operation_type === 'DRAFT_POSITIONING' && !positioning) {
+      throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_SCHEMA_INVALID', 'Positioning output must contain a positioning candidate.');
+    }
+    return JSON.parse(canonicalSerialize({
+      ...(Array.isArray(payload.requirements) ? { requirements } : {}),
+      ...(Array.isArray(payload.matches) ? { matches: matches.map(({ provenance_edges, ...match }) => match) } : {}),
+      ...(positioning ? { positioning } : {}),
+    }));
+  }
+
+  function createExecutionRecord(input = {}) {
+    return run(() => {
+      const inputRow = executionInputFor(input);
+      const request = requestForExecutionInput(inputRow);
+      if (input.payload !== undefined && canonicalSerialize(input.payload) !== canonicalSerialize(request.payload)) {
+        throw new FoundationPersistenceError('INTELLIGENCE_PROVENANCE_INVALID', 'Execution payload does not match the persisted immutable input snapshot.');
+      }
+      const maxAttempts = input.maxAttempts ?? input.max_attempts ?? 3;
+      if (!Number.isSafeInteger(maxAttempts) || maxAttempts < 1 || maxAttempts > 10) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_INVALID', 'maxAttempts must be a bounded positive integer.');
+      const existing = database.prepare('SELECT execution_id FROM intelligence_executions WHERE execution_id = ? OR idempotency_key = ? LIMIT 1').get(request.execution_id, request.idempotency_key);
+      if (existing) {
+        const record = readExecutionRow(existing.execution_id);
+        if (record.analysis_id !== inputRow.analysis_id || record.max_attempts !== maxAttempts || canonicalSerialize(record.request) !== canonicalSerialize(request)) {
+          throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution identity is already bound to different immutable inputs.');
+        }
+        return record;
+      }
+      const createdAt = executionNow(input.requested_at ?? request.requested_at);
+      database.transaction(() => {
+        database.prepare(`
+          UPDATE intelligence_executions
+             SET superseded_by_execution_id = ?, updated_at = ?
+           WHERE opportunity_id = ? AND operation_type = ?
+             AND execution_state = 'RUNNING'
+             AND execution_id <> ?
+             AND superseded_by_execution_id IS NULL
+        `).run(request.execution_id, createdAt, request.opportunity_id, request.operation_type, request.execution_id);
+        database.prepare(`
+          INSERT INTO intelligence_executions (
+            execution_id, analysis_id, idempotency_key, opportunity_id, jd_revision_id,
+            evidence_snapshot_id, input_generation, operation_type, schema_version,
+            requested_at, disclosure_classification, request_payload_json, attempt,
+            max_attempts, execution_state, result_status, validation_status,
+            result_payload_json, error_json, cancel_requested_at,
+            cancellation_acknowledged, superseded_by_execution_id, is_current,
+            created_at, updated_at, completed_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, 'RUNNING', NULL, 'NOT_RUN', NULL, NULL, NULL, NULL, NULL, 0, ?, ?, NULL)
+        `).run(
+          request.execution_id,
+          inputRow.analysis_id,
+          request.idempotency_key,
+          request.opportunity_id,
+          request.jd_revision_id,
+          request.evidence_snapshot_id,
+          request.input_generation,
+          request.operation_type,
+          request.schema_version,
+          request.requested_at,
+          request.disclosure_classification,
+          canonicalSerialize(request.payload),
+          maxAttempts,
+          createdAt,
+          createdAt,
+        );
+      })();
+      return readExecutionRow(request.execution_id);
+    });
+  }
+
+  function beginExecutionAttempt(executionId) {
+    return run(() => {
+      const record = readExecutionRow(executionId);
+      if (!record) throw new FoundationPersistenceError('EXECUTION_NOT_FOUND', 'Execution does not exist.');
+      if (record.execution_state !== 'RUNNING') return record;
+      if (currentContextIsStale(record)) {
+        return recordExecutionResult(executionId, staleExecutionResponse(record), { now: new Date().toISOString() });
+      }
+      if (record.attempt >= record.max_attempts) throw new FoundationPersistenceError('INTELLIGENCE_EXECUTION_INVALID', 'Execution attempt limit has been reached.');
+      const updatedAt = new Date().toISOString();
+      database.prepare('UPDATE intelligence_executions SET attempt = attempt + 1, updated_at = ? WHERE execution_id = ? AND execution_state = \'RUNNING\'').run(updatedAt, executionId);
+      return readExecutionRow(executionId);
+    });
+  }
+
+  function currentContextIsStale(record) {
+    if (record.superseded_by_execution_id) return true;
+    const opportunity = database.prepare('SELECT current_jd_revision_id FROM opportunities WHERE opportunity_id = ?').get(record.opportunity_id);
+    if (!opportunity || opportunity.current_jd_revision_id !== record.jd_revision_id) return true;
+    const snapshot = readSnapshot(record.evidence_snapshot_id);
+    const currentRevision = database.prepare('SELECT current_revision_id FROM evidence_records WHERE evidence_id = ?').get(snapshot.evidence_id);
+    return Boolean(currentRevision && currentRevision.current_revision_id && !snapshot.evidence_revision_ids.includes(currentRevision.current_revision_id));
+  }
+
+  function staleExecutionResponse(record) {
+    return normalizeExecutionResponse({
+      execution_id: record.request.execution_id,
+      idempotency_key: record.request.idempotency_key,
+      operation_type: record.request.operation_type,
+      schema_version: record.request.schema_version,
+      opportunity_id: record.request.opportunity_id,
+      jd_revision_id: record.request.jd_revision_id,
+      evidence_snapshot_id: record.request.evidence_snapshot_id,
+      input_generation: record.request.input_generation,
+      result_status: 'STALE',
+      validation_status: 'NOT_RUN',
+      error: { classification: 'STALE_RESULT', retryable: false, message: 'Execution result no longer matches the current input context.' },
+    }, record.request);
+  }
+
+  function terminalResponseForRecord(record) {
+    return normalizeExecutionResponse({
+      execution_id: record.request.execution_id,
+      idempotency_key: record.request.idempotency_key,
+      operation_type: record.request.operation_type,
+      schema_version: record.request.schema_version,
+      opportunity_id: record.request.opportunity_id,
+      jd_revision_id: record.request.jd_revision_id,
+      evidence_snapshot_id: record.request.evidence_snapshot_id,
+      input_generation: record.request.input_generation,
+      result_status: record.result_status,
+      validation_status: record.validation_status,
+      ...(record.result_payload === null ? {} : { payload: record.result_payload }),
+      ...(record.error === null ? {} : { error: record.error }),
+    }, record.request);
+  }
+
+  function recordExecutionResult(executionId, response, optionsInput = {}) {
+    return run(() => {
+      const record = readExecutionRow(executionId);
+      if (!record) throw new FoundationPersistenceError('EXECUTION_NOT_FOUND', 'Execution does not exist.');
+      const responseValue = normalizeExecutionResponse(response, record.request);
+      const updatedAt = executionNow(optionsInput.now);
+      const terminal = record.execution_state !== 'RUNNING';
+      if (terminal) {
+        if (optionsInput.retrying) return record;
+        try {
+          if (canonicalSerialize(terminalResponseForRecord(record)) === canonicalSerialize(responseValue)) return record;
+        } catch {
+          // Fall through to the immutable conflict below.
+        }
+        throw new FoundationPersistenceError('INTELLIGENCE_DUPLICATE_COMPLETION', 'Terminal execution cannot be overwritten by a different completion.');
+      }
+      if (optionsInput.retrying) {
+        if (currentContextIsStale(record)) return recordExecutionResult(executionId, staleExecutionResponse(record), { now: updatedAt });
+        database.prepare(`
+          UPDATE intelligence_executions
+             SET result_status = ?, validation_status = ?, result_payload_json = NULL,
+                 error_json = ?, updated_at = ?, completed_at = NULL
+           WHERE execution_id = ? AND execution_state = 'RUNNING'
+        `).run(
+          responseValue.result_status,
+          responseValue.validation_status,
+          responseValue.error ? canonicalSerialize(responseValue.error) : null,
+          updatedAt,
+          executionId,
+        );
+        return readExecutionRow(executionId);
+      }
+      let normalized = responseValue;
+      let executionState;
+      let resultPayload = null;
+      let error = normalized.error ?? null;
+      if (currentContextIsStale(record)) {
+        normalized = staleExecutionResponse(record);
+        executionState = 'STALE_RESULT_REJECTED';
+        error = normalized.error;
+      } else if (normalized.result_status === 'SUCCEEDED') {
+        try {
+          resultPayload = validateExecutionCandidate(record.request, normalized.payload);
+          executionState = 'COMPLETED';
+        } catch (validationError) {
+          normalized = normalizeExecutionResponse({
+            execution_id: record.request.execution_id,
+            idempotency_key: record.request.idempotency_key,
+            operation_type: record.request.operation_type,
+            schema_version: record.request.schema_version,
+            opportunity_id: record.request.opportunity_id,
+            jd_revision_id: record.request.jd_revision_id,
+            evidence_snapshot_id: record.request.evidence_snapshot_id,
+            input_generation: record.request.input_generation,
+            result_status: 'SCHEMA_INVALID',
+            validation_status: 'INVALID',
+            error: { classification: 'SCHEMA_INVALID', retryable: false, message: 'Execution candidate failed application validation.' },
+          }, record.request);
+          executionState = 'FAILED';
+          error = normalized.error;
+        }
+      } else if (normalized.result_status === 'CANCELLED') {
+        executionState = 'CANCELLED';
+      } else if (normalized.result_status === 'STALE') {
+        executionState = 'STALE_RESULT_REJECTED';
+      } else {
+        executionState = 'FAILED';
+      }
+      const isCurrent = executionState === 'COMPLETED' && normalized.result_status === 'SUCCEEDED';
+      const cancellationAcknowledged = normalized.result_status === 'CANCELLED'
+        ? (optionsInput.cancellationAcknowledged === undefined ? null : (optionsInput.cancellationAcknowledged ? 1 : 0))
+        : null;
+      database.transaction(() => {
+        if (isCurrent) {
+          database.prepare(`
+            UPDATE intelligence_executions
+               SET is_current = 0
+             WHERE opportunity_id = ? AND operation_type = ? AND execution_id <> ?
+          `).run(record.opportunity_id, record.operation_type, executionId);
+        }
+        database.prepare(`
+          UPDATE intelligence_executions
+             SET execution_state = ?, result_status = ?, validation_status = ?,
+                 result_payload_json = ?, error_json = ?, cancellation_acknowledged = ?,
+                 cancel_requested_at = CASE WHEN ? = 1 THEN COALESCE(cancel_requested_at, ?) ELSE cancel_requested_at END,
+                 is_current = ?, updated_at = ?, completed_at = ?
+           WHERE execution_id = ? AND execution_state = 'RUNNING'
+        `).run(
+          executionState,
+          normalized.result_status,
+          normalized.validation_status,
+          resultPayload === null ? null : canonicalSerialize(resultPayload),
+          error === null ? null : canonicalSerialize(error),
+          cancellationAcknowledged,
+          normalized.result_status === 'CANCELLED' ? 1 : 0,
+          updatedAt,
+          isCurrent ? 1 : 0,
+          updatedAt,
+          updatedAt,
+          executionId,
+        );
+      })();
+      return readExecutionRow(executionId);
+    });
+  }
+
+  function cancelExecutionRecord(executionId, optionsInput = {}) {
+    return run(() => {
+      const record = readExecutionRow(executionId);
+      if (!record) throw new FoundationPersistenceError('EXECUTION_NOT_FOUND', 'Execution does not exist.');
+      if (record.execution_state !== 'RUNNING') return record;
+      const updatedAt = executionNow(optionsInput.now);
+      database.prepare(`
+        UPDATE intelligence_executions
+           SET execution_state = 'CANCELLED', result_status = 'CANCELLED',
+               validation_status = 'NOT_RUN', result_payload_json = NULL,
+               error_json = ?, cancel_requested_at = ?,
+               cancellation_acknowledged = 0, is_current = 0,
+               updated_at = ?, completed_at = ?
+         WHERE execution_id = ? AND execution_state = 'RUNNING'
+      `).run(
+        canonicalSerialize({ classification: 'CANCELLED', message: 'Execution was cancelled.', retryable: false }),
+        updatedAt,
+        updatedAt,
+        updatedAt,
+        executionId,
+      );
+      return readExecutionRow(executionId);
+    });
+  }
+
+  const executionService = createExecutionService({
+    persistence: {
+      createExecutionRecord,
+      beginExecutionAttempt,
+      recordExecutionResult,
+      getExecutionRecord: (executionId) => run(() => readExecutionRow(executionId)),
+      cancelExecutionRecord,
+    },
+    executor: options.executor,
+    defaults: options.executionDefaults,
+  });
+
   function saveRequirement(input = {}) {
     return run(() => {
       const requirement = validateRequirement(input);
@@ -2181,6 +2885,13 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     })),
     savePositioningVersion,
     getPositioningVersion: (positioningVersionId) => run(() => readPositioningVersion(positioningVersionId)),
+    buildExecutionRequest: executionService.buildRequest,
+    execute: executionService.execute,
+    cancelExecution: executionService.cancel,
+    completeExecution: executionService.complete,
+    getExecution: executionService.get,
+    projectSurfaceState: executionService.projectSurfaceState,
+    executionConstants: executionService.constants,
     constants: Object.freeze({
       claimKinds: CLAIM_KINDS,
       explicitness: EXPLICITNESS,

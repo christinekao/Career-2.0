@@ -97,9 +97,7 @@ export default function App() {
         if (!active) return;
         setContext(nextContext);
         const nextExecution = nextContext.currentExecution || null;
-        const nextPositioning = nextContext.currentPositioning
-          || nextExecution?.result_payload?.positioning
-          || null;
+        const nextPositioning = nextContext.currentPositioning || null;
         setExecution(nextExecution);
         setPositioning(nextPositioning);
         setError(null);

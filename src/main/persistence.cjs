@@ -1449,6 +1449,12 @@ function markPositioningStaleForContext(database, { opportunityId, evidenceId } 
              SELECT positioning_version_id FROM intelligence_positioning_versions WHERE state <> 'CONFIRMED'
            )
       `).run(opportunityId);
+      database.prepare(`
+        UPDATE intelligence_executions
+           SET is_current = 0
+         WHERE opportunity_id = ? AND is_current = 1
+           AND jd_revision_id <> COALESCE((SELECT current_jd_revision_id FROM opportunities WHERE opportunity_id = ?), '')
+      `).run(opportunityId, opportunityId);
     }
     if (evidenceId) {
       database.prepare(`
@@ -1463,8 +1469,25 @@ function markPositioningStaleForContext(database, { opportunityId, evidenceId } 
         DELETE FROM intelligence_positioning_current
          WHERE positioning_version_id IN (
            SELECT positioning_version_id FROM intelligence_positioning_versions WHERE state <> 'CONFIRMED'
-        )
+         )
       `).run();
+      database.prepare(`
+        UPDATE intelligence_executions
+           SET is_current = 0
+         WHERE is_current = 1
+           AND evidence_snapshot_id IN (
+             SELECT snapshot.evidence_snapshot_id
+               FROM intelligence_evidence_snapshots snapshot
+               JOIN evidence_records evidence ON evidence.evidence_id = snapshot.evidence_id
+              WHERE evidence.evidence_id = ?
+                AND evidence.current_revision_id IS NOT NULL
+                AND NOT EXISTS (
+                  SELECT 1
+                    FROM json_each(snapshot.evidence_revision_ids_json) selected_revision
+                   WHERE selected_revision.value = evidence.current_revision_id
+                )
+           )
+      `).run(evidenceId);
     }
   })();
 }
@@ -2381,7 +2404,9 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       const existing = database.prepare('SELECT analysis_id FROM intelligence_requirements WHERE requirement_id = ?').get(requirement.requirement_id);
       if (existing) {
         const persisted = readRequirement(requirement.requirement_id);
-        if (existing.analysis_id !== analysisId || canonicalSerialize(persisted) !== canonicalSerialize(requirement)) {
+        // Requirement identity is bound to the JD anchor and immutable requirement fields;
+        // the same requirement may be reused by a newer Evidence generation.
+        if (canonicalSerialize(persisted) !== canonicalSerialize(requirement)) {
           throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution requirement identity is already bound to different immutable inputs.');
         }
       }
@@ -2704,7 +2729,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       const existing = database.prepare('SELECT * FROM intelligence_requirements WHERE requirement_id = ?').get(requirement.requirement_id);
       if (existing) {
         const current = readRequirement(requirement.requirement_id);
-        if (existing.analysis_id !== analysisId || canonicalSerialize(current) !== canonicalSerialize(requirement)) {
+        if (canonicalSerialize(current) !== canonicalSerialize(requirement)) {
           throw new FoundationPersistenceError('INTELLIGENCE_IDENTITY_CONFLICT', 'Execution requirement identity is already bound to different immutable inputs.');
         }
         continue;
@@ -3272,6 +3297,11 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
          WHERE e.opportunity_id = ? AND e.jd_revision_id = ? AND e.is_current = 1
          ORDER BY e.updated_at DESC LIMIT 1
       `).get(opportunityId, jdRevisionId);
+      let currentExecution = current ? readExecutionRow(current.execution_id) : null;
+      if (currentExecution && currentContextIsStale(currentExecution)) {
+        database.prepare('UPDATE intelligence_executions SET is_current = 0 WHERE execution_id = ? AND is_current = 1').run(currentExecution.execution_id);
+        currentExecution = null;
+      }
       const currentPositioning = getCurrentPositioning(opportunityId);
       return Object.freeze({
         opportunity: {
@@ -3289,7 +3319,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
           availabilityStatus: jd.availability_status,
         },
         evidenceSnapshot: snapshot,
-        currentExecution: current ? readExecutionRow(current.execution_id) : null,
+        currentExecution,
         currentPositioning: currentPositioning?.jd_revision_id === jdRevisionId ? currentPositioning : null,
       });
     });

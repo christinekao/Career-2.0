@@ -48,6 +48,7 @@ contextBridge.exposeInMainWorld('careerFoundation', {
   },
   intelligence: {
     loadContext: (input) => invokeDomain('intelligence:load-context', input),
+    beginExecution: (input) => invokeDomain('intelligence:begin-execution', input),
     startExecution: (input) => invokeDomain('intelligence:start-execution', input),
     cancelExecution: (executionId) => invokeDomain('intelligence:cancel-execution', executionId),
     getExecution: (executionId) => invokeDomain('intelligence:get-execution', executionId),

@@ -140,6 +140,72 @@ test('provider-independent execution contract sends immutable confirmed input an
   assert.equal(minimalResponse.input_generation, observedRequest.input_generation);
 });
 
+test('purpose-specific begin returns a canonical running execution before terminal completion', async (t) => {
+  let observedRequest;
+  let observedSignal;
+  let resolveProvider;
+  const ctx = setup({
+    executionDefaults: { timeoutMs: 250, cancellationGraceMs: 5, maxAttempts: 1 },
+    executor: {
+      execute(request, { signal }) {
+        observedRequest = request;
+        observedSignal = signal;
+        return new Promise((resolve) => { resolveProvider = resolve; });
+      },
+    },
+  });
+  t.after(() => {
+    resolveProvider?.(responseFor(observedRequest));
+    ctx.close();
+  });
+
+  const started = ctx.store.intelligence.beginExecution({ ...ctx.input, maxAttempts: 1 });
+  assert.equal(started.execution_state, 'RUNNING');
+  assert.equal(typeof started.execution_id, 'string');
+  assert.equal(ctx.store.intelligence.getExecution(started.execution_id).execution_state, 'RUNNING');
+
+  const cancelled = await ctx.store.intelligence.cancelExecution(started.execution_id);
+  assert.equal(cancelled.execution_id, started.execution_id);
+  assert.equal(cancelled.execution_state, 'CANCELLED');
+  assert.equal(observedSignal.aborted, true);
+});
+
+test('purpose-specific begin derives stable identity for repeated renderer input', async (t) => {
+  let calls = 0;
+  const ctx = setup({
+    executor: {
+      async execute(request) {
+        calls += 1;
+        return responseFor(request);
+      },
+    },
+  });
+  t.after(() => ctx.close());
+  const input = {
+    opportunityId: ctx.opportunity.opportunityId,
+    jdRevisionId: ctx.jd.jdRevisionId,
+    evidenceRevisionIds: [ctx.confirmed.currentRevisionId],
+    inputGeneration: 'renderer-generated-identity',
+    operationType: 'ANALYZE_REQUIREMENTS',
+    disclosureClassification: 'LOCAL_ONLY',
+  };
+
+  const first = ctx.store.intelligence.beginExecution(input);
+  assert.equal(first.execution_state, 'RUNNING');
+  let completed = ctx.store.intelligence.getExecution(first.execution_id);
+  while (completed.execution_state === 'RUNNING') {
+    await waitForTurn();
+    completed = ctx.store.intelligence.getExecution(first.execution_id);
+  }
+  assert.equal(completed.execution_state, 'COMPLETED');
+
+  const second = ctx.store.intelligence.beginExecution(input);
+  assert.equal(second.execution_id, first.execution_id);
+  assert.equal(second.idempotency_key, first.idempotency_key);
+  assert.equal(second.execution_state, 'COMPLETED');
+  assert.equal(calls, 1);
+});
+
 test('draft or ineligible input is rejected before executor invocation', async (t) => {
   let calls = 0;
   const ctx = setup({ executor: { async execute() { calls += 1; return null; } } });

@@ -495,14 +495,36 @@ function createExecutionService({ persistence, executor, now = () => new Date(),
     return persistence.recordExecutionResult(record.execution_id, response, { now: currentTime().toISOString() });
   }
 
-  async function execute(input = {}) {
+  function begin(input = {}) {
     const config = configFor(input);
     const record = persistence.createExecutionRecord({ ...input, maxAttempts: config.maxAttempts });
-    if (['COMPLETED', 'CANCELLED', 'FAILED', 'STALE_RESULT_REJECTED'].includes(record.execution_state)) return record;
-    if (inFlight.has(record.execution_id)) return inFlight.get(record.execution_id);
-    const promise = runAttempt(record, input, config).finally(() => inFlight.delete(record.execution_id));
+    if (['COMPLETED', 'CANCELLED', 'FAILED', 'STALE_RESULT_REJECTED'].includes(record.execution_state)) {
+      return Object.freeze({ record, promise: Promise.resolve(record) });
+    }
+    if (inFlight.has(record.execution_id)) {
+      return Object.freeze({ record, promise: inFlight.get(record.execution_id) });
+    }
+    const promise = runAttempt(record, input, config).catch((error) => {
+      let current;
+      try {
+        current = persistence.getExecutionRecord(record.execution_id);
+        if (current?.execution_state === 'RUNNING') {
+          return persistence.recordExecutionResult(
+            record.execution_id,
+            responseForFailure(current.request, 'FAILED', 'UNAVAILABLE', false, 'Execution failed before reaching a terminal result.'),
+          );
+        }
+      } catch {
+        // Preserve the original failure when the persistence boundary cannot record the safe terminal state.
+      }
+      throw error;
+    }).finally(() => inFlight.delete(record.execution_id));
     inFlight.set(record.execution_id, promise);
-    return promise;
+    return Object.freeze({ record, promise });
+  }
+
+  async function execute(input = {}) {
+    return begin(input).promise;
   }
 
   async function cancel(executionId) {
@@ -526,6 +548,7 @@ function createExecutionService({ persistence, executor, now = () => new Date(),
 
   return Object.freeze({
     buildRequest: buildExecutionRequest,
+    begin,
     cancel,
     complete,
     execute,

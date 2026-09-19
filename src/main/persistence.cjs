@@ -3325,9 +3325,26 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     });
   }
 
-  async function startExecution(input = {}) {
-    const bundle = createInputGeneration(input);
-    return executionService.execute({
+  function executionInputForBundle(input = {}) {
+    const hasExplicitExecutionIdentity = input.execution_id !== undefined || input.executionId !== undefined
+      || input.idempotency_key !== undefined || input.idempotencyKey !== undefined;
+    const hasExplicitRequestedAt = input.requested_at !== undefined || input.requestedAt !== undefined;
+    const identitySeed = {
+      opportunity_id: input.opportunity_id ?? input.opportunityId,
+      jd_revision_id: input.jd_revision_id ?? input.jdRevisionId,
+      evidence_revision_ids: input.evidence_revision_ids ?? input.evidenceRevisionIds,
+      input_generation: input.input_generation ?? input.inputGeneration,
+      operation_type: input.operation_type ?? input.operationType,
+    };
+    const generatedIdentity = crypto.createHash('sha256')
+      .update(canonicalSerialize(identitySeed), 'utf8')
+      .digest('hex');
+    const generatedInput = {
+      ...input,
+      executionId: input.execution_id ?? input.executionId ?? `execution:${generatedIdentity}`,
+      idempotencyKey: input.idempotency_key ?? input.idempotencyKey ?? `idempotency:${generatedIdentity}`,
+    };
+    const toExecutionInput = (bundle) => ({
       ...input,
       analysis_id: bundle.analysis_id,
       execution_id: bundle.execution_id,
@@ -3342,6 +3359,39 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
       requested_at: bundle.requested_at,
       disclosure_classification: bundle.disclosure_classification,
     });
+    try {
+      return toExecutionInput(createInputGeneration(generatedInput));
+    } catch (error) {
+      if (hasExplicitExecutionIdentity || hasExplicitRequestedAt || error?.code !== 'INTELLIGENCE_IDENTITY_CONFLICT') throw error;
+      const existing = database.prepare(`
+        SELECT execution_id, idempotency_key, requested_at
+          FROM intelligence_input_generations
+         WHERE opportunity_id = ? AND jd_revision_id = ?
+           AND input_generation = ? AND operation_type = ?
+      `).get(
+        identitySeed.opportunity_id,
+        identitySeed.jd_revision_id,
+        identitySeed.input_generation,
+        identitySeed.operation_type,
+      );
+      if (!existing) throw error;
+      return toExecutionInput(createInputGeneration({
+        ...generatedInput,
+        executionId: existing.execution_id,
+        idempotencyKey: existing.idempotency_key,
+        requestedAt: existing.requested_at,
+      }));
+    }
+  }
+
+  async function startExecution(input = {}) {
+    return executionService.execute(executionInputForBundle(input));
+  }
+
+  function beginExecution(input = {}) {
+    const started = executionService.begin(executionInputForBundle(input));
+    started.promise.catch(() => undefined);
+    return started.record;
   }
 
   return Object.freeze({
@@ -3370,6 +3420,7 @@ function createIntelligenceOperations(database, privateRoot, ownership, options,
     getCurrentPositioning,
     listPositioningVersions,
     loadContext,
+    beginExecution,
     startExecution,
     buildExecutionRequest: executionService.buildRequest,
     execute: executionService.execute,

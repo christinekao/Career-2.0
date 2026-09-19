@@ -1,7 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import executionState from './execution-state.cjs';
 
 const EXECUTION_STATES = ['IDLE', 'RUNNING', 'COMPLETED', 'CANCELLED', 'FAILED', 'STALE_RESULT_REJECTED'];
 const CONTENT_STATES = ['SELECTION_REQUIRED', 'LOADING', 'EMPTY', 'AVAILABLE_CURRENT', 'STALE', 'FAILED_UNAVAILABLE'];
+const { isTerminalExecution, resolveCurrentResult, sameExecutionContext } = executionState;
+const EXECUTION_POLL_INTERVAL_MS = 25;
 
 function projectSurface({ selected, loading, hasResult, fresh, executionState }) {
   if (!EXECUTION_STATES.includes(executionState)) throw new Error('Unsupported execution state.');
@@ -20,6 +23,21 @@ function errorMessage(error) {
   return error?.message || 'The intelligence slice is unavailable.';
 }
 
+async function waitForTerminalExecution(api, executionId) {
+  let nextExecution = await api.intelligence.getExecution(executionId);
+  if (!nextExecution || !EXECUTION_STATES.includes(nextExecution.execution_state)) {
+    throw new Error('Execution state is unavailable or unsupported.');
+  }
+  while (!isTerminalExecution(nextExecution)) {
+    await new Promise((resolve) => setTimeout(resolve, EXECUTION_POLL_INTERVAL_MS));
+    nextExecution = await api.intelligence.getExecution(executionId);
+    if (!nextExecution || !EXECUTION_STATES.includes(nextExecution.execution_state)) {
+      throw new Error('Execution state is unavailable or unsupported.');
+    }
+  }
+  return nextExecution;
+}
+
 function SourceLink({ value }) {
   if (!value) return <span className="trace">source unavailable</span>;
   const href = typeof value === 'string' ? value : value.reference || value.uri || value.locator;
@@ -36,9 +54,12 @@ export default function App() {
   const [selectedEvidenceRevisionIds, setSelectedEvidenceRevisionIds] = useState([]);
   const [context, setContext] = useState(null);
   const [execution, setExecution] = useState(null);
+  const [currentResult, setCurrentResult] = useState(null);
+  const [currentResultContext, setCurrentResultContext] = useState(null);
   const [positioning, setPositioning] = useState(null);
   const [surface, setSurface] = useState({ content: 'SELECTION_REQUIRED', execution: 'IDLE' });
-  const [busy, setBusy] = useState(false);
+  const [isStarting, setIsStarting] = useState(false);
+  const [isCancelling, setIsCancelling] = useState(false);
   const [error, setError] = useState(null);
 
   const api = window.careerFoundation;
@@ -51,8 +72,9 @@ export default function App() {
       .filter((revision) => revision.confirmationState === 'CONFIRMED'),
     [evidenceRecords],
   );
-  const payload = execution?.result_payload || null;
+  const payload = currentResult?.result_payload || null;
   const hasResult = Boolean(payload || positioning);
+  const isRunning = execution?.execution_state === 'RUNNING';
 
   useEffect(() => {
     let active = true;
@@ -72,6 +94,8 @@ export default function App() {
     if (!selectedOpportunity) {
       setContext(null);
       setExecution(null);
+      setCurrentResult(null);
+      setCurrentResultContext(null);
       setPositioning(null);
       setSelectedEvidenceRevisionIds([]);
       setSelectedJdRevisionId('');
@@ -80,6 +104,8 @@ export default function App() {
     }
     setContext(null);
     setExecution(null);
+    setCurrentResult(null);
+    setCurrentResultContext(null);
     setPositioning(null);
     setSelectedEvidenceRevisionIds([]);
     const revision = selectedOpportunity.jdRevisions?.find((item) => item.jdRevisionId === selectedJdRevisionId)
@@ -91,14 +117,18 @@ export default function App() {
       return () => { active = false; };
     }
     setSelectedJdRevisionId(revision.jdRevisionId);
-    setBusy(true);
+    setIsStarting(false);
+    setIsCancelling(false);
     api.intelligence.loadContext({ opportunityId: selectedOpportunity.opportunityId, jdRevisionId: revision.jdRevisionId })
       .then((nextContext) => {
         if (!active) return;
         setContext(nextContext);
         const nextExecution = nextContext.currentExecution || null;
-        const nextPositioning = nextContext.currentPositioning || null;
+        const nextResult = nextExecution?.result_payload ? nextExecution : null;
+        const nextPositioning = nextContext.currentPositioning || nextResult?.result_payload?.positioning || null;
         setExecution(nextExecution);
+        setCurrentResult(nextResult);
+        setCurrentResultContext(nextResult || nextPositioning || nextExecution || null);
         setPositioning(nextPositioning);
         setError(null);
         setSurface(projectSurface({
@@ -115,7 +145,7 @@ export default function App() {
         setError(errorMessage(nextError));
         setSurface({ content: 'FAILED_UNAVAILABLE', execution: 'FAILED' });
       })
-      .finally(() => { if (active) setBusy(false); });
+      .finally(() => { if (active) setIsStarting(false); });
     return () => { active = false; };
   }, [selectedOpportunityId, selectedJdRevisionId, selectedOpportunity, api]);
 
@@ -123,6 +153,8 @@ export default function App() {
     const id = event.target.value;
     setSelectedEvidenceRevisionIds(id ? [id] : []);
     setExecution(null);
+    setCurrentResult(null);
+    setCurrentResultContext(null);
     setPositioning(null);
     setSurface(projectSurface({ selected: Boolean(context), loading: false, hasResult: false, fresh: true, executionState: 'IDLE' }));
   }
@@ -133,51 +165,82 @@ export default function App() {
       setSurface({ content: 'FAILED_UNAVAILABLE', execution: 'FAILED' });
       return;
     }
-    setBusy(true);
+    setIsStarting(true);
     setError(null);
-    setExecution({ execution_state: 'RUNNING' });
-    setSurface(projectSurface({ selected: true, loading: false, hasResult, fresh: true, executionState: 'RUNNING' }));
+    const inputGeneration = `ui:${selectedJdRevisionId}:${selectedEvidenceRevisionIds.join(',')}`;
     try {
-      const nextExecution = await api.intelligence.startExecution({
+      const acceptedExecution = await api.intelligence.beginExecution({
         opportunityId: selectedOpportunityId,
         jdRevisionId: selectedJdRevisionId,
         evidenceRevisionIds: selectedEvidenceRevisionIds,
-        inputGeneration: `ui:${selectedJdRevisionId}:${selectedEvidenceRevisionIds.join(',')}`,
+        inputGeneration,
         operationType: 'ANALYZE_REQUIREMENTS',
-        executionId: `ui-execution:${Date.now()}`,
-        idempotencyKey: `ui-idempotency:${Date.now()}`,
         disclosureClassification: 'LOCAL_SYNTHETIC',
       });
+      const preserve = Boolean(currentResultContext && sameExecutionContext(currentResultContext, acceptedExecution));
+      if (!preserve) {
+        setCurrentResult(null);
+        setCurrentResultContext(null);
+        setPositioning(null);
+      }
+      setExecution(acceptedExecution);
+      setIsStarting(false);
+      setSurface(projectSurface({ selected: true, loading: false, hasResult: preserve ? hasResult : false, fresh: preserve, executionState: 'RUNNING' }));
+      const nextExecution = await waitForTerminalExecution(api, acceptedExecution.execution_id);
+      const nextResult = resolveCurrentResult(preserve ? currentResult : null, nextExecution);
+      const nextPositioning = nextResult?.result_payload?.positioning
+        || (preserve ? positioning : null);
       setExecution(nextExecution);
-      setPositioning(nextExecution.result_payload?.positioning || null);
-      const nextExecutionState = nextExecution.execution_state === 'STALE_RESULT_REJECTED' ? 'STALE_RESULT_REJECTED' : nextExecution.execution_state;
-      setSurface(projectSurface({ selected: true, loading: false, hasResult: Boolean(nextExecution.result_payload) || hasResult, fresh: nextExecutionState === 'COMPLETED' || hasResult, executionState: nextExecutionState }));
+      setCurrentResult(nextResult);
+      setCurrentResultContext(nextResult || nextPositioning || null);
+      setPositioning(nextPositioning);
+      setError(nextExecution.execution_state === 'FAILED' ? errorMessage(nextExecution.error) : null);
+      const nextHasResult = Boolean(nextResult?.result_payload || nextPositioning);
+      const nextFresh = nextHasResult && nextExecution.execution_state !== 'STALE_RESULT_REJECTED';
+      setSurface(projectSurface({
+        selected: true,
+        loading: false,
+        hasResult: nextHasResult,
+        fresh: nextFresh,
+        executionState: nextExecution.execution_state,
+      }));
     } catch (nextError) {
       setError(errorMessage(nextError));
       setExecution({ execution_state: 'FAILED' });
       setSurface(projectSurface({ selected: true, loading: false, hasResult, fresh: true, executionState: 'FAILED' }));
     } finally {
-      setBusy(false);
+      setIsStarting(false);
     }
   }
 
   async function cancelAnalysis() {
-    if (!execution?.execution_id) return;
-    setBusy(true);
+    if (!execution?.execution_id || !isRunning || isStarting || isCancelling) return;
+    setIsCancelling(true);
     try {
       const cancelled = await api.intelligence.cancelExecution(execution.execution_id);
       setExecution(cancelled);
-      setSurface(projectSurface({ selected: true, loading: false, hasResult, fresh: true, executionState: 'CANCELLED' }));
+      const retained = resolveCurrentResult(currentResult, cancelled);
+      const retainedPositioning = retained?.result_payload?.positioning || (retained ? positioning : null);
+      setCurrentResult(retained);
+      setCurrentResultContext(retained || retainedPositioning || null);
+      setPositioning(retainedPositioning);
+      setSurface(projectSurface({
+        selected: true,
+        loading: false,
+        hasResult: Boolean(retained?.result_payload || retainedPositioning),
+        fresh: Boolean(retained?.result_payload || retainedPositioning),
+        executionState: cancelled.execution_state,
+      }));
     } catch (nextError) {
       setError(errorMessage(nextError));
     } finally {
-      setBusy(false);
+      setIsCancelling(false);
     }
   }
 
   async function confirmPositioning() {
     if (!positioning?.positioning_version_id) return;
-    setBusy(true);
+    setIsCancelling(true);
     try {
       const confirmed = await api.intelligence.confirmPositioning(positioning.positioning_version_id, new Date().toISOString());
       setPositioning(confirmed);
@@ -185,7 +248,7 @@ export default function App() {
     } catch (nextError) {
       setError(errorMessage(nextError));
     } finally {
-      setBusy(false);
+      setIsCancelling(false);
     }
   }
 
@@ -225,7 +288,10 @@ export default function App() {
           </select>
         </label>
         {!confirmedEvidence.length ? <p className="notice">No confirmed Evidence is available. Intelligence remains unavailable until one is confirmed.</p> : null}
-        <div className="actions"><button type="button" onClick={runAnalysis} disabled={busy || !context || !selectedEvidenceRevisionIds.length}>Run intelligence</button><button type="button" className="secondary" onClick={cancelAnalysis} disabled={busy || execution?.execution_state !== 'RUNNING'}>Cancel</button></div>
+        <div className="actions"><button type="button" onClick={runAnalysis} disabled={isStarting || isCancelling || isRunning || !context || !selectedEvidenceRevisionIds.length}>Run intelligence</button><button type="button" className="secondary" onClick={cancelAnalysis} disabled={!isRunning || isStarting || isCancelling}>Cancel</button></div>
+        {isRunning && hasResult ? <p className="notice">Current result remains available while the new run is running.</p> : null}
+        {execution?.execution_state === 'FAILED' && hasResult ? <p className="notice error">Latest run failed; the current result remains available.</p> : null}
+        {execution?.execution_state === 'CANCELLED' && hasResult ? <p className="notice">Latest run was cancelled; the current result remains available.</p> : null}
         {surface.content === 'FAILED_UNAVAILABLE' ? <p className="notice error">Unavailable or failed. Review the selected context and retry.</p> : null}
         {error ? <p className="notice error" role="alert">{error}</p> : null}
         {payload?.requirements ? <div className="result-block"><h3>Requirements</h3><ul>{payload.requirements.map((item) => <li key={item.requirement_id}><strong>{item.priority}</strong> {item.normalized_content}<span className="trace">{item.requirement_id}</span><SourceLink value={item.source_ref} /></li>)}</ul></div> : null}
@@ -235,7 +301,7 @@ export default function App() {
       <section className="panel" aria-labelledby="positioning-heading">
         <div className="panel-heading"><div><p className="eyebrow">Strategy candidate</p><h2 id="positioning-heading">Positioning</h2></div><span className="state-chip">{positioning?.state || 'EMPTY'}</span></div>
         {positioning?.claims?.length ? <ul>{positioning.claims.map((claim) => <li key={claim.positioning_claim_id}><strong>{claim.claim_kind}</strong> {claim.claim_text}<span className="trace">{claim.match_id || claim.gap_id}</span></li>)}</ul> : <p className="notice">A validated candidate will appear here. Positioning is never confirmed automatically.</p>}
-        {positioning?.state === 'CANDIDATE' ? <button type="button" onClick={confirmPositioning} disabled={busy}>Confirm positioning</button> : null}
+        {positioning?.state === 'CANDIDATE' ? <button type="button" onClick={confirmPositioning} disabled={isStarting || isCancelling}>Confirm positioning</button> : null}
         {positioning?.state === 'CONFIRMED' ? <p className="confirmed">Confirmed current positioning · {positioning.positioning_version_id}</p> : null}
       </section>
       <p className="scope-note">Local, purpose-specific surface. Career Evidence remains the canonical source of truth.</p>

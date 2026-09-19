@@ -6,9 +6,9 @@
   "main": "src/main/index.cjs",
   "scripts": {
     "build": "vite build",
-    "check": "node --check src/main/index.cjs && node --check src/main/foundation.cjs && node --check src/main/private-root.cjs && node --check src/main/runtime-config.cjs && node --check src/main/ownership.cjs && node --check src/main/intelligence.cjs && node --check src/main/execution.cjs && node --check src/main/persistence.cjs && node --check src/main/backup.cjs && node --check src/preload/index.cjs && node --check test/abi-probe-electron.cjs && node --check test/offline-startup-electron.cjs && node --check test/public-ipc-error-electron.cjs && node --check test/foundation.test.cjs && node --check test/intelligence.test.cjs && node --check test/execution.test.cjs && node --check test/m2-completion.test.cjs",
+    "check": "node --check src/main/index.cjs && node --check src/main/foundation.cjs && node --check src/main/private-root.cjs && node --check src/main/runtime-config.cjs && node --check src/main/ownership.cjs && node --check src/main/intelligence.cjs && node --check src/main/execution.cjs && node --check src/main/persistence.cjs && node --check src/main/backup.cjs && node --check src/preload/index.cjs && node --check test/abi-probe-electron.cjs && node --check test/offline-startup-electron.cjs && node --check test/public-ipc-error-electron.cjs && node --check test/foundation.test.cjs && node --check test/intelligence.test.cjs && node --check test/execution.test.cjs && node --check test/m2-completion.test.cjs && node --check test/renderer-execution.test.cjs",
     "start": "electron .",
-    "test": "node --test test/foundation.test.cjs test/intelligence.test.cjs test/execution.test.cjs test/m2-completion.test.cjs",
+    "test": "node --test test/foundation.test.cjs test/intelligence.test.cjs test/execution.test.cjs test/m2-completion.test.cjs test/renderer-execution.test.cjs",
     "probe:electron": "electron test/abi-probe-electron.cjs",
     "probe:startup": "electron test/offline-startup-electron.cjs",
     "probe:public-ipc-error": "electron test/public-ipc-error-electron.cjs",

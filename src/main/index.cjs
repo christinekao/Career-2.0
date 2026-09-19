@@ -65,6 +65,7 @@ ipcMain.handle('evidence:confirm-revision', (_event, evidenceId, evidenceRevisio
 ));
 
 ipcMain.handle('intelligence:load-context', (_event, input) => invokeDomain('intelligence', 'loadContext', [input]));
+ipcMain.handle('intelligence:begin-execution', (_event, input) => invokeDomain('intelligence', 'beginExecution', [input]));
 ipcMain.handle('intelligence:start-execution', (_event, input) => invokeDomain('intelligence', 'startExecution', [input]));
 ipcMain.handle('intelligence:cancel-execution', (_event, executionId) => invokeDomain('intelligence', 'cancelExecution', [executionId]));
 ipcMain.handle('intelligence:get-execution', (_event, executionId) => invokeDomain('intelligence', 'getExecution', [executionId]));

@@ -17,8 +17,12 @@ executor seam is promise-returning and non-blocking, receives an
 execution-bound AbortSignal, and is bounded by the service timeout/grace
 policy. Superseded retries, interrupted persisted runs, malformed persisted
 candidates, stale positioning, and invalid backup material fail closed without
-replacing current results. Independent read-only Batch 2 acceptance is
-pending; M2 remains `IN_PROGRESS` and later batches have not started.
+replacing current results. The renderer repair adds a purpose-specific
+begin/cancel boundary, returns the canonical persisted execution identity while
+RUNNING, polls the existing execution read operation, and keeps the current
+accepted result separate from active execution state through failure and
+cancellation. Independent read-only Batch 2 acceptance is pending; M2 remains
+`IN_PROGRESS` and later batches have not started.
 
 ## Goals / Non-Goals
 

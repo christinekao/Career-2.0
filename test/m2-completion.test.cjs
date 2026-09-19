@@ -432,7 +432,7 @@ test('main/preload surfaces stay finite and renderer source has no private persi
   const preload = fs.readFileSync(path.join(DEFAULT_REPOSITORY_ROOT, 'src/preload/index.cjs'), 'utf8');
   const renderer = fs.readFileSync(path.join(DEFAULT_REPOSITORY_ROOT, 'src/renderer/App.jsx'), 'utf8');
   for (const channel of [
-    'intelligence:load-context', 'intelligence:start-execution', 'intelligence:cancel-execution',
+    'intelligence:load-context', 'intelligence:begin-execution', 'intelligence:start-execution', 'intelligence:cancel-execution',
     'intelligence:get-execution', 'intelligence:get-positioning', 'intelligence:get-current-positioning',
     'intelligence:list-positioning', 'intelligence:confirm-positioning',
   ]) {

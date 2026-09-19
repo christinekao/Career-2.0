@@ -1,6 +1,6 @@
 # 架構現況與提案邊界
 
-現況更新：2026-09-19。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`），M1 close-out commit `911a10392a1d2073145c7859feb001d0dd38fe2c` 已推送至 `origin/main`；M1 Foundation hardening implementation 依核准 threat model 完成。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過；active same-user .career2 replacement at lock-open 未防護，依使用者決策列為 M1 non-goal/future hardening，fixture skipped，不宣稱 race 已修復。Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已通過：fresh PID 79150 載入實際 Career 2.0 main entry、建立並顯示 BrowserWindow、renderer/preload/IPC 正常、synthetic private root 的 store READY version 1 與 identity/root binding 正常；完成 8 秒 visible observation，使用者實際看到視窗，並以 code 0 / signal null clean exit。Build、OpenSpec strict 通過。Read-only M1 acceptance review PASS；`establish-m1-foundation` 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Career Evidence/revision runtime、additive migration、migration ownership checkpoints、degraded foundation fallback、true cross-process restart/read-back、domain schema readiness validation、public error-boundary sanitization、main writer 與 narrow IPC/preload 已實作，36 PASS / 1 SKIPPED / 0 FAIL 的 domain validation 與獨立 read-only acceptance 通過，已 archive 至 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`；完整 M1 product-domain features 仍未實作或 accepted。`m2-intelligence-vertical-slice` planning 已 accepted，Batch 1 已 ACCEPTED，Batch 2 implementation 已完成並修復 final acceptance findings A/B，累計 25/26 ledger tasks、final read-only re-review 尚未執行；M2 `IN_PROGRESS`，later batches NOT_STARTED；本輪新增完整 backup source-byte coverage、generation current de-projection 與 restart/read-back regressions，未改 executor provider/model 或 dependency versions。
+現況更新：2026-09-19。Career 2.0 已建立獨立 Git baseline（`74e05d0bdd20e55453b64504bd04d77bb408ed86`），M1 close-out commit `911a10392a1d2073145c7859feb001d0dd38fe2c` 已推送至 `origin/main`；M1 Foundation hardening implementation 依核准 threat model 完成。Static symlink/hard-link、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過；active same-user .career2 replacement at lock-open 未防護，依使用者決策列為 M1 non-goal/future hardening，fixture skipped，不宣稱 race 已修復。Foundation tests 17 PASS / 1 SKIPPED / 0 FAIL。H5 fresh Electron startup acceptance 已通過：fresh PID 79150 載入實際 Career 2.0 main entry、建立並顯示 BrowserWindow、renderer/preload/IPC 正常、synthetic private root 的 store READY version 1 與 identity/root binding 正常；完成 8 秒 visible observation，使用者實際看到視窗，並以 code 0 / signal null clean exit。Build、OpenSpec strict 通過。Read-only M1 acceptance review PASS；`establish-m1-foundation` 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 Opportunity/JD 與 Career Evidence/revision runtime、additive migration、migration ownership checkpoints、degraded foundation fallback、true cross-process restart/read-back、domain schema readiness validation、public error-boundary sanitization、main writer 與 narrow IPC/preload 已實作，36 PASS / 1 SKIPPED / 0 FAIL 的 domain validation 與獨立 read-only acceptance 通過，已 archive 至 `openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/`；完整 M1 product-domain features 仍未實作或 accepted。`m2-intelligence-vertical-slice` planning 已 accepted，Batch 1 已 ACCEPTED，Batch 2 implementation 已完成並修復 final acceptance findings A/B 及 renderer begin/cancel/current-result blockers，累計 25/26 ledger tasks、bundled full suite 74 PASS / 1 SKIPPED / 0 FAIL、final read-only re-review 尚未執行；M2 `IN_PROGRESS`，later batches NOT_STARTED；本輪新增完整 backup source-byte coverage、generation current de-projection、purpose-specific execution IPC、renderer current-result preservation 與 restart/read-back regressions，未改 executor provider/model 或 dependency versions。
 
 ## 已觀察現況
 
@@ -13,7 +13,7 @@
 | 本案程式發現 | M1 Foundation source 與 tests 已存在；code graph 未建立，本案圖譜 generation = Insufficient evidence |
 | 現有 runtime / local data | 本案目錄內不存在；外部是否已有相關資料為 Insufficient evidence，沒有廣泛掃描私人目錄 |
 | 外部 repo / remote / release | 獨立 local Git repo 已建立；`origin` = `https://github.com/christinekao/Career-2.0.git`，`main` tracks `origin/main`；尚無 release 或 worktree；Engineering Memory 不屬本案依賴 |
-| 本輪狀態 | Foundation hardening 已依核准 threat model 完成並通過 read-only M1 acceptance review；static path confinement、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過。Active same-user path swap 是未防護的 future-hardening non-goal。H5 fresh Electron GUI acceptance 已完成並具 automated + human-observed evidence；OpenSpec M1 changes 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 runtime、validation 與獨立 acceptance 已完成並 archive；`m2-intelligence-vertical-slice` planning 已 accepted，Batch 1 已 ACCEPTED，Batch 2 implementation 已完成並修復 final acceptance findings A/B，累計 25/26 tasks，final read-only re-review 尚未執行；M2 `IN_PROGRESS`，later batches NOT_STARTED。完整 product-domain runtime schema/workflow、full M2 acceptance 與 later M2 slices 尚未被宣稱完成 |
+| 本輪狀態 | Foundation hardening 已依核准 threat model 完成並通過 read-only M1 acceptance review；static path confinement、Darwin recovery-path、stale-recovery concurrency 與 non-Darwin stale-claim crash/takeover regressions 通過。Active same-user path swap 是未防護的 future-hardening non-goal。H5 fresh Electron GUI acceptance 已完成並具 automated + human-observed evidence；OpenSpec M1 changes 已 sync/archive。`m1-opportunity-evidence-substrate` 的最小 runtime、validation 與獨立 acceptance 已完成並 archive；`m2-intelligence-vertical-slice` planning 已 accepted，Batch 1 已 ACCEPTED，Batch 2 implementation 已完成並修復 A/B 與 renderer begin/cancel/current-result blockers，累計 25/26 tasks，bundled suite 74 PASS / 1 SKIPPED / 0 FAIL，final read-only re-review 尚未執行；M2 `IN_PROGRESS`，later batches NOT_STARTED。完整 product-domain runtime schema/workflow、full M2 acceptance 與 later M2 slices 尚未被宣稱完成 |
 
 ## 決策權與文件權威
 
@@ -33,7 +33,7 @@ Opportunity、單一 JD revision、固定 Evidence snapshot、可追溯的
 requirements/matches/gaps、versioned positioning，以及 bounded candidate
  execution；不代表完整 product-domain runtime 已存在。
 
-M2 的硬性前置是 [`m1-opportunity-evidence-substrate`](../../openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/)，其最小 implementation、validation 與獨立 acceptance 已完成並 archive；該 gate 已滿足。M2 詳細的 identity、taxonomy、traceability、execution、migration、backup authority 與 minimal surface contract 由 active change 的 proposal/spec/design/tasks 擁有；M2 planning review 已 PASS，baseline close-out 已完成，Batch 1 已完成 10/26 scoped tasks 並通過獨立 acceptance，Batch 2 implementation 已完成其餘 8 個 tasks、已修復 final acceptance findings A/B，累計 25/26，final independent read-only acceptance re-review 尚未執行；later batches NOT_STARTED。本文件只保留 current boundary 與 dependency，不複製整份 M2 spec。
+M2 的硬性前置是 [`m1-opportunity-evidence-substrate`](../../openspec/changes/archive/2026-09-18-m1-opportunity-evidence-substrate/)，其最小 implementation、validation 與獨立 acceptance 已完成並 archive；該 gate 已滿足。M2 詳細的 identity、taxonomy、traceability、execution、migration、backup authority 與 minimal surface contract 由 active change 的 proposal/spec/design/tasks 擁有；M2 planning review 已 PASS，baseline close-out 已完成，Batch 1 已完成 10/26 scoped tasks 並通過獨立 acceptance，Batch 2 implementation 已完成其餘 8 個 tasks、已修復 final acceptance findings A/B 與 renderer begin/cancel/current-result blockers，累計 25/26，final independent read-only acceptance re-review 尚未執行；later batches NOT_STARTED。本文件只保留 current boundary 與 dependency，不複製整份 M2 spec。
 
 ### M2 Batch 2 implementation
 
@@ -48,10 +48,13 @@ before persistence, and execution completion creates only candidate
 requirements/matches/positioning records. Explicit confirmation owns the
 positioning current pointer; Evidence remains canonical and immutable. The
 same application-owned persistence boundary now also validates complete-store
-backup/restore coverage and exposes only purpose-specific main/preload
-operations to the minimal Opportunity/JD/Evidence renderer surface. The
-executor receives no database handle or private-root path. The final
-independent read-only Batch 2 acceptance re-review remains pending after the A/B repair.
+backup/restore coverage and exposes only purpose-specific begin/start/cancel/
+read execution operations to the minimal Opportunity/JD/Evidence renderer
+surface. The renderer receives a canonical persisted RUNNING identity before
+terminal completion and keeps the prior current result separate from the
+active execution state. The executor receives no database handle or
+private-root path. The final independent read-only Batch 2 acceptance
+re-review remains pending after the renderer repair.
 
 ## Active derived diagrams
 
